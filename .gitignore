@@ -1,0 +1,19 @@
+# Runtime data (SQLite db lives here, survives rebuilds)
+data/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Environment / secrets
+.env
+
+# SQLite databases
+*.db
+*.db-wal
+*.db-shm
+
+# OS cruft
+.DS_Store
