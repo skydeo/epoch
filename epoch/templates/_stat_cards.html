@@ -1,0 +1,38 @@
+{#- Dashboard stat cards. Rendered server-side from one compute_ledger fold. -#}
+<div class="stat-grid">
+  <article class="stat-card {% if stats.current_balance_negative %}stat-negative{% endif %}">
+    <span class="stat-label">Current PTO</span>
+    <span class="stat-value">{{ "%.2f"|format(stats.current_balance) }}</span>
+    <span class="stat-sub">hours · pay period in progress</span>
+  </article>
+  <article class="stat-card">
+    <span class="stat-label">PH remaining {{ stats.year }}</span>
+    <span class="stat-value">{{ "%g"|format(stats.ph_remaining) }}</span>
+    <span class="stat-sub">of {{ "%g"|format(stats.ph_granted) }} h granted</span>
+  </article>
+  <article class="stat-card">
+    <span class="stat-label">Max balance ever</span>
+    <span class="stat-value">{{ "%.2f"|format(stats.max_balance) }}</span>
+    <span class="stat-sub">peak accrued to date</span>
+  </article>
+  <article class="stat-card">
+    <span class="stat-label">% of cap</span>
+    <span class="stat-value">{{ "%g"|format(stats.pct_of_cap) }}%</span>
+    <span class="stat-sub">of {{ "%g"|format(stats.cap) }} h cap</span>
+  </article>
+  <article class="stat-card">
+    <span class="stat-label">PTO used YTD</span>
+    <span class="stat-value">{{ "%g"|format(stats.pto_used_ytd) }}</span>
+    <span class="stat-sub">hours in {{ stats.year }}</span>
+  </article>
+  <article class="stat-card">
+    <span class="stat-label">Next pay date</span>
+    <span class="stat-value">{{ stats.next_pay_date.isoformat() if stats.next_pay_date else "—" }}</span>
+    <span class="stat-sub">+{{ "%g"|format(stats.next_pay_accrual) }} h accrual</span>
+  </article>
+</div>
+{% if stats.warnings %}
+<div class="warnings">
+  <ul>{% for w in stats.warnings %}<li>{{ w }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
