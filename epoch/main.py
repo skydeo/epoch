@@ -10,14 +10,18 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from epoch import __version__
 from epoch.config import Settings, get_settings
 from epoch.db import get_session, init_db
-from epoch.routes import csv_routes, health, usage
+from epoch.routes import csv_routes, data, health, pages, usage
 from epoch.seed import seed_defaults
+
+STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
 @asynccontextmanager
@@ -47,7 +51,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.dependency_overrides[get_settings] = lambda: settings
 
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
     app.include_router(health.router)
+    app.include_router(pages.router)
+    app.include_router(data.router)
     app.include_router(usage.router)
     app.include_router(csv_routes.router)
     return app

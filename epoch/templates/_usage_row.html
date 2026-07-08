@@ -1,5 +1,5 @@
 {#- One usage log row (display state). Swapped in/out by HTMX on edit/toggle/delete. -#}
-<tr id="usage-row-{{ row.id }}" class="usage-row usage-row-{{ row.type.value }}">
+<tr id="usage-row-{{ row.id }}" class="usage-row usage-row-{{ row.type.value }}{% if today is defined and today %} {{ 'usage-future' if row.date > today else 'usage-past' }}{% endif %}">
   <td class="usage-date">{{ row.date.isoformat() }}</td>
   <td class="usage-hours">{{ "%g"|format(row.hours) }}</td>
   <td class="usage-type">{{ "Personal Holiday" if row.type.value == "personal_holiday" else "PTO" }}</td>

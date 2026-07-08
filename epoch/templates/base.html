@@ -1,0 +1,34 @@
+<!doctype html>
+{#- App shell: Pico.css (classless) + app.css + htmx, shared nav, content block.
+    Every full page extends this; HTMX partials never do. -#}
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}epoch{% endblock %} · epoch</title>
+  <link rel="stylesheet" href="/static/pico.classless.min.css">
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/htmx.min.js" defer></script>
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <nav class="container-fluid app-nav">
+    <ul>
+      <li><strong>epoch</strong></li>
+    </ul>
+    <ul>
+      {% set active = active_page | default("") %}
+      <li><a href="/"           {% if active == "dashboard" %}aria-current="page"{% endif %}>Dashboard</a></li>
+      <li><a href="/accruals"   {% if active == "accruals" %}aria-current="page"{% endif %}>Accruals</a></li>
+      <li><a href="/usage"      {% if active == "usage" %}aria-current="page"{% endif %}>Usage</a></li>
+      <li><a href="/projection" {% if active == "projection" %}aria-current="page"{% endif %}>Projection</a></li>
+      <li><a href="/settings"   {% if active == "settings" %}aria-current="page"{% endif %}>Settings</a></li>
+      <li><a href="/import"     {% if active == "import" %}aria-current="page"{% endif %}>Import</a></li>
+    </ul>
+  </nav>
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

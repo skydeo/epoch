@@ -122,7 +122,9 @@ async def usage_rows(
         entries = [entry for entry in entries if entry.requested == requested]
 
     entries.sort(key=lambda entry: (entry.date, entry.id or 0))
-    return templates.TemplateResponse(request, "_usage_rows.html", {"rows": entries})
+    return templates.TemplateResponse(
+        request, "_usage_rows.html", {"rows": entries, "today": date.today()}
+    )
 
 
 def _get_entry(session, entry_id: int) -> UsageEntry:

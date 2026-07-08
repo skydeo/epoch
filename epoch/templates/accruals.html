@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Accruals{% endblock %}
+{% block content %}
+<hgroup>
+  <h1>Accruals</h1>
+  <p>One row per pay period — accrued on the fly from the rules, never stored.</p>
+</hgroup>
+
+<form class="filter-bar" method="get" action="/accruals">
+  <label>Year
+    <select name="year" onchange="this.form.submit()">
+      <option value="">All periods</option>
+      {% for y in years %}
+      <option value="{{ y }}" {% if y == selected_year %}selected{% endif %}>{{ y }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <a href="#period-current" role="button" class="secondary outline">Jump to current</a>
+</form>
+
+<div class="table-scroll">
+  <table class="ledger-table striped">
+    <thead>
+      <tr>
+        <th>#</th><th>Start</th><th>End</th><th>Pay date</th>
+        <th class="num">Rate</th><th class="num">PTO used</th><th class="num">PH used</th>
+        <th class="num">Balance</th><th>Lost</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in rows %}
+      {% set r = item.row %}
+      <tr class="{{ item.state }}" {% if item.is_current %}id="period-current"{% endif %}>
+        <td>{{ r.index }}</td>
+        <td>{{ r.start.isoformat() }}</td>
+        <td>{{ r.end.isoformat() }}</td>
+        <td>{{ r.pay_date.isoformat() }}</td>
+        <td class="num">{{ "%.2f"|format(r.accrual) }}</td>
+        <td class="num">{{ "%g"|format(r.pto_used) }}</td>
+        <td class="num">{{ "%g"|format(r.ph_used) }}</td>
+        <td class="num {% if r.balance < 0 %}balance-negative{% endif %}">{{ "%.2f"|format(r.balance) }}</td>
+        <td>
+          {% if r.lost_to_cap > 0 %}<span class="lost-badge">−{{ "%.2f"|format(r.lost_to_cap) }} cap</span>{% endif %}
+          {% if r.lost_to_rollover > 0 %}<span class="lost-badge">−{{ "%.2f"|format(r.lost_to_rollover) }} rollover</span>{% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="9">No periods for this year.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  // Anchor to the current period on load (like the sheet's greyed-future view).
+  window.addEventListener("DOMContentLoaded", function () {
+    var el = document.getElementById("period-current");
+    if (el) el.scrollIntoView({ block: "center" });
+  });
+</script>
+{% endblock %}
