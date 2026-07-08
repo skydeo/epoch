@@ -1,0 +1,20 @@
+{#- One usage log row (display state). Swapped in/out by HTMX on edit/toggle/delete. -#}
+<tr id="usage-row-{{ row.id }}" class="usage-row usage-row-{{ row.type.value }}">
+  <td class="usage-date">{{ row.date.isoformat() }}</td>
+  <td class="usage-hours">{{ "%g"|format(row.hours) }}</td>
+  <td class="usage-type">{{ "Personal Holiday" if row.type.value == "personal_holiday" else "PTO" }}</td>
+  <td class="usage-reason">{{ row.reason or "" }}</td>
+  <td class="usage-requested">
+    <input type="checkbox" {% if row.requested %}checked{% endif %}
+           hx-post="/usage/{{ row.id }}/requested"
+           hx-target="#usage-row-{{ row.id }}" hx-swap="outerHTML">
+  </td>
+  <td class="usage-actions">
+    <button type="button"
+            hx-get="/usage/{{ row.id }}/edit"
+            hx-target="#usage-row-{{ row.id }}" hx-swap="outerHTML">Edit</button>
+    <button type="button"
+            hx-delete="/usage/{{ row.id }}"
+            hx-target="#usage-row-{{ row.id }}" hx-swap="delete">Delete</button>
+  </td>
+</tr>

@@ -1,0 +1,21 @@
+{#- Import preview: parsed count + per-row errors, then a confirm form that
+    carries the raw CSV forward (hidden) so confirm is stateless. -#}
+<div id="import-preview" class="import-preview">
+  <p class="import-count">{{ count }} usage row{{ "" if count == 1 else "s" }} parsed.</p>
+  {% if errors %}
+  <details open class="import-errors">
+    <summary>{{ errors|length }} row error{{ "" if errors|length == 1 else "s" }}</summary>
+    <ul>
+      {% for error in errors %}<li>Row {{ error.row }}: {{ error.message }}</li>{% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+  <form hx-post="/import/csv/confirm" hx-target="#import-preview" hx-swap="outerHTML">
+    <textarea name="csv_text" hidden>{{ csv_text }}</textarea>
+    <fieldset>
+      <label><input type="radio" name="mode" value="replace" checked> Replace all (destructive)</label>
+      <label><input type="radio" name="mode" value="merge"> Merge (skip duplicates)</label>
+    </fieldset>
+    <button type="submit">Confirm import</button>
+  </form>
+</div>

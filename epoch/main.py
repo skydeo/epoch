@@ -16,7 +16,7 @@ from fastapi import FastAPI
 from epoch import __version__
 from epoch.config import Settings, get_settings
 from epoch.db import get_session, init_db
-from epoch.routes import health
+from epoch.routes import csv_routes, health, usage
 from epoch.seed import seed_defaults
 
 
@@ -48,6 +48,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.dependency_overrides[get_settings] = lambda: settings
 
     app.include_router(health.router)
+    app.include_router(usage.router)
+    app.include_router(csv_routes.router)
     return app
 
 
