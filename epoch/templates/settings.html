@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<hgroup>
+  <h1>Settings</h1>
+  <p>Engine constants, company holidays, and accrual tiers. Edits are the single
+     source of truth for the accrual fold and survive restarts.</p>
+</hgroup>
+
+{% if saved %}
+<div class="saved-note" role="status"><p>Settings saved.</p></div>
+{% endif %}
+{% if errors %}
+<div class="warnings" role="alert">
+  <strong>Please fix the following:</strong>
+  <ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+{#- Engine constants: a plain POST → validate → 303 redirect back. -#}
+<h2>Engine constants</h2>
+<form method="post" action="/settings" class="settings-form">
+  <div class="settings-grid">
+    {% for key, kind, label, help in fields %}
+      {% if kind == "bool" %}
+      <fieldset class="settings-field settings-bool">
+        <label>
+          <input type="checkbox" name="{{ key }}" role="switch"
+                 {% if settings[key] == "true" %}checked{% endif %}>
+          {{ label }}
+        </label>
+        <small>{{ help }}</small>
+      </fieldset>
+      {% else %}
+      <label class="settings-field">{{ label }}
+        <input name="{{ key }}" value="{{ settings[key] }}" required
+          {% if kind == "date" %}type="date"
+          {% elif kind == "int" %}type="number" step="1" min="1"
+          {% else %}type="number" step="any" min="0"{% endif %}>
+        <small>{{ help }}</small>
+      </label>
+      {% endif %}
+    {% endfor %}
+  </div>
+  <button type="submit">Save constants</button>
+</form>
+
+{#- Company holidays: HTMX add / delete, tbody re-render. -#}
+<h2>Company holidays</h2>
+<p><small>Skipped when a usage range is expanded into per-day rows.</small></p>
+<form class="entry-bar"
+      hx-post="/settings/holidays"
+      hx-target="#holiday-tbody"
+      hx-swap="innerHTML"
+      hx-on::after-request="if(event.detail.successful) this.reset()">
+  <label>Date <input type="date" name="date" required></label>
+  <label>Name <input type="text" name="name" placeholder="Holiday name" required></label>
+  <button type="submit">Add holiday</button>
+</form>
+<div class="table-scroll">
+  <table class="ledger-table striped">
+    <thead><tr><th>Date</th><th>Name</th><th></th></tr></thead>
+    <tbody id="holiday-tbody">
+      {% include "_holiday_rows.html" %}
+    </tbody>
+  </table>
+</div>
+
+{#- Accrual tiers: inline edit (Save gathers the row via hx-include) + delete. -#}
+<h2>Accrual tiers</h2>
+<p><small>The rate for a period is the tier whose start date is the latest one on
+   or before the period's end. <code>annual_hours</code> is authoritative
+   (rate = annual_hours ÷ periods_per_year). At least one tier must remain.</small></p>
+<div class="table-scroll">
+  <table class="ledger-table striped">
+    <thead>
+      <tr><th>Starts on</th><th>Annual days</th><th>Annual hours</th><th>Label</th><th></th></tr>
+    </thead>
+    <tbody id="tier-tbody">
+      {% include "_tier_rows.html" %}
+    </tbody>
+  </table>
+</div>
+<form class="entry-bar"
+      hx-post="/settings/tiers"
+      hx-target="#tier-tbody"
+      hx-swap="innerHTML"
+      hx-on::after-request="if(event.detail.successful) this.reset()">
+  <label>Starts on <input type="date" name="starts_on" required></label>
+  <label>Annual days <input type="number" step="any" min="0" name="annual_days" required></label>
+  <label>Annual hours <input type="number" step="any" min="0" name="annual_hours" required></label>
+  <label>Label <input type="text" name="label" placeholder="e.g. 27 days/yr (5 years)" required></label>
+  <button type="submit">Add tier</button>
+</form>
+{% endblock %}

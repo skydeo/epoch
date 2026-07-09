@@ -1,0 +1,25 @@
+{#- Accrual-tier rows (tbody re-render after add/edit/delete). Each row is an
+    inline-editable form: Save POSTs the row's inputs, Delete removes it (the
+    server refuses to delete the last remaining tier). -#}
+{% for t in tiers %}
+<tr class="tier-row" id="tier-row-{{ t.id }}">
+  <td><input form="tier-form-{{ t.id }}" type="date" name="starts_on" value="{{ t.starts_on.isoformat() }}" required></td>
+  <td><input form="tier-form-{{ t.id }}" type="number" step="any" min="0" name="annual_days" value="{{ "%g"|format(t.annual_days) }}" required></td>
+  <td><input form="tier-form-{{ t.id }}" type="number" step="any" min="0" name="annual_hours" value="{{ "%g"|format(t.annual_hours) }}" required></td>
+  <td><input form="tier-form-{{ t.id }}" type="text" name="label" value="{{ t.label }}" required></td>
+  <td class="row-actions">
+    <form id="tier-form-{{ t.id }}"
+          hx-post="/settings/tiers/{{ t.id }}"
+          hx-target="#tier-tbody" hx-swap="innerHTML">
+      <button type="submit">Save</button>
+      <button type="button" class="secondary outline"
+              {% if tiers|length <= 1 %}disabled title="At least one tier must remain"{% endif %}
+              hx-delete="/settings/tiers/{{ t.id }}"
+              hx-target="#tier-tbody" hx-swap="innerHTML"
+              hx-confirm="Delete tier {{ t.label }}?">Delete</button>
+    </form>
+  </td>
+</tr>
+{% else %}
+<tr class="tier-empty"><td colspan="5">No accrual tiers.</td></tr>
+{% endfor %}

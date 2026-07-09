@@ -1,0 +1,15 @@
+{#- Company-holiday rows (tbody re-render after add/delete). -#}
+{% for h in holidays %}
+<tr class="holiday-row" id="holiday-row-{{ h.id }}">
+  <td>{{ h.date.isoformat() }}</td>
+  <td>{{ h.name }}</td>
+  <td class="row-actions">
+    <button type="button" class="secondary outline"
+            hx-delete="/settings/holidays/{{ h.id }}"
+            hx-target="#holiday-tbody" hx-swap="innerHTML"
+            hx-confirm="Delete holiday {{ h.name }} ({{ h.date.isoformat() }})?">Delete</button>
+  </td>
+</tr>
+{% else %}
+<tr class="holiday-empty"><td colspan="3">No company holidays.</td></tr>
+{% endfor %}

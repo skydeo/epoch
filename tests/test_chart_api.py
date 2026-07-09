@@ -153,7 +153,27 @@ def test_usage_page(client):
     assert 'hx-post="/usage"' in resp.text  # the new-entry range form
 
 
-def test_stub_pages(client):
-    for path in ("/projection", "/settings", "/import"):
-        resp = client.get(path)
-        assert resp.status_code == 200
+def test_projection_page(client):
+    resp = client.get("/projection")
+    assert resp.status_code == 200
+    assert 'hx-get="/projection/result"' in resp.text  # the date picker form
+    assert "Projected PTO balance" in resp.text  # initial (today) snapshot
+    assert "Per-year stats" in resp.text  # the yearly_stats table
+    assert "Lost to rollover" in resp.text
+
+
+def test_settings_page(client):
+    resp = client.get("/settings")
+    assert resp.status_code == 200
+    assert 'name="max_balance_hours"' in resp.text  # a constants field
+    assert 'hx-post="/settings/holidays"' in resp.text  # holiday add form
+    assert 'hx-post="/settings/tiers"' in resp.text  # tier add form
+    assert "22 days/yr (hire)" in resp.text  # seeded tier rendered
+
+
+def test_import_page(client):
+    resp = client.get("/import")
+    assert resp.status_code == 200
+    assert 'hx-post="/import/csv"' in resp.text  # the upload form
+    assert 'href="/export/csv"' in resp.text  # the export link
+    assert "0-hour rows are skipped" in resp.text  # format docs

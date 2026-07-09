@@ -26,8 +26,10 @@ from epoch.engine import (
     accrual_rate,
     balance_on,
     compute_ledger,
+    loss_warnings,
     period_bounds,
     period_index_for,
+    yearly_stats,
 )
 from epoch.models import UsageEntry
 from epoch.templating import templates
@@ -186,28 +188,125 @@ async def usage_page(request: Request) -> HTMLResponse:
 
 
 # --------------------------------------------------------------------------- #
-# Phase 6 stubs — keep the nav from 404-ing until those pages land.
+# Projection
 # --------------------------------------------------------------------------- #
 
 
-def _stub(request: Request, active: str, title: str) -> HTMLResponse:
-    return templates.TemplateResponse(
-        request,
-        "stub.html",
-        {"active_page": active, "stub_title": title},
-    )
+def _horizon(cfg: EngineConfig, today: date) -> date:
+    """today + the configured projection horizon (whole-month, stdlib only)."""
+    total = today.year * 12 + (today.month - 1) + cfg.projection_horizon_months
+    year, month = divmod(total, 12)
+    return date(year, month + 1, min(today.day, 28))
+
+
+def _projection_snapshot(cfg: EngineConfig, usage, today: date, target: date) -> dict:
+    """Balance snapshot + span warnings for a projection to ``target``.
+
+    ``balance_on(target)`` gives the end-of-period balance of the period
+    *containing* ``target``; span warnings scan the ledger rows overlapping the
+    window between today and the target for cap / rollover forfeitures.
+    """
+    snap = balance_on(cfg, usage, target)
+    p_start, p_end, p_pay = period_bounds(cfg, snap.period)
+
+    lo, hi = min(today, target), max(today, target)
+    span_rows = [
+        r
+        for r in compute_ledger(cfg, usage, hi)
+        if r.end >= lo and r.start <= hi
+    ]
+    warnings = list(snap.warnings) + loss_warnings(span_rows)
+
+    return {
+        "snap": snap,
+        "period_start": p_start,
+        "period_end": p_end,
+        "period_pay": p_pay,
+        "balance_negative": snap.pto_balance < 0,
+        "warnings": warnings,
+        "target": target,
+        "today": today,
+        "is_future": target > today,
+    }
 
 
 @router.get("/projection", response_class=HTMLResponse)
-async def projection_stub(request: Request) -> HTMLResponse:
-    return _stub(request, "projection", "Projection")
+async def projection(request: Request) -> HTMLResponse:
+    """Date picker + an initial snapshot for today, plus the per-year stats table."""
+    today = _today()
+    with get_session() as session:
+        cfg = load_engine_config(session)
+        usage = load_usage(session)
+
+    result = _projection_snapshot(cfg, usage, today, today)
+    stats = yearly_stats(cfg, usage, max(today, _horizon(cfg, today)))
+
+    return templates.TemplateResponse(
+        request,
+        "projection.html",
+        {
+            "active_page": "projection",
+            "result": result,
+            "stats": stats,
+            "today": today,
+            "hire_date": cfg.hire_date,
+        },
+    )
 
 
-@router.get("/settings", response_class=HTMLResponse)
-async def settings_stub(request: Request) -> HTMLResponse:
-    return _stub(request, "settings", "Settings")
+@router.get("/projection/result", response_class=HTMLResponse)
+async def projection_result(request: Request, date: str) -> HTMLResponse:  # noqa: A002
+    """HTMX partial: the snapshot for a selected date (≥ hire date).
+
+    Returns a 400 partial (with a message) for an unparseable date or a date
+    before the hire date — the engine has no period for it.
+    """
+    today = _today()
+    with get_session() as session:
+        cfg = load_engine_config(session)
+        usage = load_usage(session)
+
+    try:
+        target = date_from_iso(date)
+    except ValueError:
+        return templates.TemplateResponse(
+            request,
+            "_projection_result.html",
+            {"error": f"{date!r} is not a valid date."},
+            status_code=400,
+        )
+    if target < cfg.hire_date:
+        return templates.TemplateResponse(
+            request,
+            "_projection_result.html",
+            {
+                "error": (
+                    f"Date {target.isoformat()} precedes the hire date "
+                    f"{cfg.hire_date.isoformat()} — no pay period exists."
+                )
+            },
+            status_code=400,
+        )
+
+    result = _projection_snapshot(cfg, usage, today, target)
+    return templates.TemplateResponse(
+        request, "_projection_result.html", {"result": result}
+    )
+
+
+def date_from_iso(value: str) -> date:
+    """Parse an ISO date, raising ``ValueError`` on anything malformed."""
+    return date.fromisoformat(value)
+
+
+# --------------------------------------------------------------------------- #
+# Import
+# --------------------------------------------------------------------------- #
 
 
 @router.get("/import", response_class=HTMLResponse)
-async def import_stub(request: Request) -> HTMLResponse:
-    return _stub(request, "import", "Import")
+async def import_page(request: Request) -> HTMLResponse:
+    """Upload form (→ preview partial), an export link, and format docs."""
+    return templates.TemplateResponse(
+        request, "import.html", {"active_page": "import"}
+    )

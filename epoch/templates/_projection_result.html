@@ -1,0 +1,51 @@
+{#- Projection snapshot for the selected date. Rendered on page load and swapped
+    in via hx-get on date change. `error` is set for an invalid / pre-hire date. -#}
+{% if error %}
+<div class="proj-error" role="alert">
+  <p>{{ error }}</p>
+</div>
+{% else %}
+{% set r = result %}
+{% set snap = r.snap %}
+<article class="proj-snapshot {% if r.balance_negative %}stat-negative{% endif %}">
+  <header>
+    <strong>Projected balance on {{ r.target.isoformat() }}</strong>
+    {% if r.is_future %}<span class="proj-tag">future</span>
+    {% elif r.target < r.today %}<span class="proj-tag">past</span>
+    {% else %}<span class="proj-tag">today</span>{% endif %}
+  </header>
+
+  <div class="stat-grid">
+    <div class="stat-card {% if r.balance_negative %}stat-negative{% endif %}">
+      <span class="stat-label">Projected PTO balance</span>
+      <span class="stat-value">{{ "%.2f"|format(snap.pto_balance) }}</span>
+      <span class="stat-sub">hours · pay period in progress</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">PH remaining {{ r.target.year }}</span>
+      <span class="stat-value">{{ "%g"|format(snap.ph_remaining) }}</span>
+      <span class="stat-sub">{{ "%g"|format(snap.ph_used) }} of {{ "%g"|format(snap.ph_granted) }} h used</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">Containing pay period</span>
+      <span class="stat-value">#{{ snap.period }}</span>
+      <span class="stat-sub">{{ r.period_start.isoformat() }} → {{ r.period_end.isoformat() }}</span>
+    </div>
+  </div>
+
+  <p class="proj-note">
+    <small>Balance reflects the pay period containing the selected date — it
+    includes that whole period's accrual and usage. Pay date
+    {{ r.period_pay.isoformat() }}.</small>
+  </p>
+
+  {% if r.warnings %}
+  <div class="warnings">
+    <strong>Forfeiture warnings between {{ r.today.isoformat() }} and {{ r.target.isoformat() }}:</strong>
+    <ul>{% for w in r.warnings %}<li>{{ w }}</li>{% endfor %}</ul>
+  </div>
+  {% else %}
+  <p class="proj-ok"><small>No hours forfeited to the cap or year-end rollover in this window.</small></p>
+  {% endif %}
+</article>
+{% endif %}
