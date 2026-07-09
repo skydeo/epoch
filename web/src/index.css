@@ -130,3 +130,79 @@ input[type="date"]::-webkit-calendar-picker-indicator {
     animation: none;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   DataTable responsive engine (HANDOFF §3 — "the centerpiece").
+
+   Rows are CSS grids driven by custom properties. Desktop (>= 900px) renders a
+   real table: header shown, per-cell mobile labels hidden, numbers right-
+   aligned. Below 900px each row collapses to a card (label–value pairs), the
+   header hides, and the grid folds to one column. This mirrors the prototype's
+   --acc-cols / --thead-display / --lbl / --jtxt|jnum|jctr switch exactly.
+
+   Components feed the desktop template via inline `--dt-desk-cols`; the mobile
+   override lives in the media query below (in-stylesheet so it beats the inline
+   var without needing !important).
+--------------------------------------------------------------------------- */
+.dt {
+  --dt-thead: grid;
+  --dt-lbl: none;
+  --dt-jtxt: flex-start;
+  --dt-jnum: flex-end;
+  --dt-jctr: center;
+  --dt-row-mb: 0px;
+  --dt-row-pad: 9px 14px;
+  --dt-row-border: 0;
+  --dt-row-radius: 0;
+  --dt-row-bg: transparent;
+  --dt-row-shadow: none;
+}
+.dt-head {
+  display: var(--dt-thead);
+  grid-template-columns: var(--dt-desk-cols);
+}
+/* Fixed min-width forces horizontal scroll on narrow *desktop* so wide tables
+   don't clip (HANDOFF §11). It must NOT apply once rows collapse to cards,
+   otherwise the 1fr cards stretch past the viewport (values scroll off-screen).
+   The prototype leaves min-width auto below 900px — mirror that here. */
+@media (min-width: 900px) {
+  .dt-body {
+    min-width: var(--dt-min, auto);
+  }
+}
+.dt-row {
+  display: grid;
+  grid-template-columns: var(--dt-desk-cols);
+  align-items: center;
+  gap: 6px;
+  padding: var(--dt-row-pad);
+  margin-bottom: var(--dt-row-mb);
+  border-radius: var(--dt-row-radius);
+  border: var(--dt-row-border);
+  box-shadow: var(--dt-row-shadow);
+  border-bottom: 1px solid var(--border);
+  background: var(--dt-row-bg);
+}
+.dt-row:last-child {
+  border-bottom: var(--dt-row-border);
+}
+
+@media (max-width: 899.98px) {
+  .dt {
+    --dt-thead: none;
+    --dt-lbl: block;
+    --dt-jtxt: space-between;
+    --dt-jnum: space-between;
+    --dt-jctr: space-between;
+    --dt-row-mb: 10px;
+    --dt-row-pad: 12px 14px;
+    --dt-row-border: 1px solid var(--border);
+    --dt-row-radius: 14px;
+    --dt-row-bg: var(--surface);
+    --dt-row-shadow: var(--shadow-sm);
+  }
+  .dt-head,
+  .dt-row {
+    grid-template-columns: 1fr;
+  }
+}

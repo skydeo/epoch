@@ -7,7 +7,15 @@
 //    usage mutation must invalidate `dashboard`, `chart`, and `accruals` (a
 //    balance shift ripples through all three) — HANDOFF §7.
 
-import type { ChartData, DashboardStats } from "../types";
+import type {
+  AccrualsResponse,
+  ChartData,
+  DashboardStats,
+  UsageCreate,
+  UsageEntry,
+  UsagePatch,
+  UsageResponse,
+} from "../types";
 
 export class ApiError extends Error {
   status: number;
@@ -63,12 +71,41 @@ export interface ChartParams {
   end?: string;
 }
 
+export interface UsageFilters {
+  type?: string;
+  year?: number;
+  requested?: boolean;
+}
+
 export const api = {
   dashboard: () => apiFetch<DashboardStats>("/api/dashboard"),
   chart: (params: ChartParams = {}) =>
     apiFetch<ChartData>(
       `/api/chart${qs({ start: params.start, end: params.end })}`,
     ),
+  accruals: (year?: number) =>
+    apiFetch<AccrualsResponse>(`/api/accruals${qs({ year })}`),
+  usage: (filters: UsageFilters = {}) =>
+    apiFetch<UsageResponse>(
+      `/api/usage${qs({
+        type: filters.type,
+        year: filters.year,
+        requested:
+          filters.requested === undefined ? undefined : String(filters.requested),
+      })}`,
+    ),
+  createUsage: (body: UsageCreate) =>
+    apiFetch<{ created: UsageEntry[] }>("/api/usage", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  patchUsage: (id: number, body: UsagePatch) =>
+    apiFetch<{ row: UsageEntry }>(`/api/usage/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  deleteUsage: (id: number) =>
+    apiFetch<void>(`/api/usage/${id}`, { method: "DELETE" }),
 };
 
 // Query-key registry. Use the factory functions so keys stay structurally

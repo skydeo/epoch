@@ -4,6 +4,8 @@ import { useEffect } from "react";
 import { AppShell } from "./components/AppShell";
 import { Placeholder } from "./components/Placeholder";
 import { Dashboard } from "./pages/Dashboard";
+import { Accruals } from "./pages/Accruals";
+import { Usage } from "./pages/Usage";
 
 // Scroll to top on every navigation (HANDOFF §7).
 function ScrollToTop() {
@@ -21,24 +23,8 @@ export function App() {
       <Routes>
         <Route element={<AppShell />}>
           <Route index element={<Dashboard />} />
-          <Route
-            path="accruals"
-            element={
-              <Placeholder
-                title="Accruals"
-                blurb="One row per pay period — accrued on the fly from the rules, never stored."
-              />
-            }
-          />
-          <Route
-            path="usage"
-            element={
-              <Placeholder
-                title="Usage"
-                blurb="Log PTO and personal-holiday days. A range expands to one row per working day."
-              />
-            }
-          />
+          <Route path="accruals" element={<Accruals />} />
+          <Route path="usage" element={<Usage />} />
           <Route
             path="projection"
             element={

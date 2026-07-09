@@ -55,3 +55,34 @@ export interface AccrualRow {
   state: "past" | "current" | "future";
   is_current: boolean;
 }
+
+export interface AccrualsResponse {
+  rows: AccrualRow[];
+  years: number[];
+  current_index: number;
+}
+
+export interface UsageResponse {
+  rows: UsageEntry[];
+  years: number[];
+  hire_date: string; // ISO date
+  hours_per_day: number;
+}
+
+// POST /api/usage body → per-day expansion happens server-side.
+export interface UsageCreate {
+  start: string;
+  end: string;
+  type: UsageTypeValue;
+  reason: string;
+  requested: boolean;
+}
+
+// PATCH /api/usage/{id} — partial; covers inline edit and the requested toggle.
+export interface UsagePatch {
+  date?: string;
+  hours?: number;
+  type?: UsageTypeValue;
+  reason?: string | null;
+  requested?: boolean;
+}
