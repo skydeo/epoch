@@ -55,6 +55,18 @@ def _load_tiers(session) -> list[AccrualTier]:
     )
 
 
+def _persist_settings(session, values: dict[str, str]) -> None:
+    """Upsert every validated constant. Shared by the form route and the API."""
+    for key, value in values.items():
+        row = session.get(AppSetting, key)
+        if row is None:
+            session.add(AppSetting(key=key, value=value))
+        else:
+            row.value = value
+            session.add(row)
+    session.commit()
+
+
 # --------------------------------------------------------------------------- #
 # Constants form
 # --------------------------------------------------------------------------- #
@@ -153,14 +165,7 @@ async def save_settings(request: Request) -> Response:
         )
 
     with get_session() as session:
-        for key, value in values.items():
-            row = session.get(AppSetting, key)
-            if row is None:
-                session.add(AppSetting(key=key, value=value))
-            else:
-                row.value = value
-                session.add(row)
-        session.commit()
+        _persist_settings(session, values)
 
     return RedirectResponse("/settings?saved=1", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -186,6 +191,23 @@ def _holiday_rows(request: Request, session) -> Response:
     )
 
 
+def _create_holiday(session, d: date, name: str) -> None:
+    """Idempotent-on-date insert of a company holiday. Shared by route + API."""
+    exists = session.exec(
+        select(CompanyHoliday).where(CompanyHoliday.date == d)
+    ).first()
+    if exists is None:
+        session.add(CompanyHoliday(date=d, name=name.strip() or d.isoformat()))
+        session.commit()
+
+
+def _remove_holiday(session, holiday_id: int) -> None:
+    holiday = session.get(CompanyHoliday, holiday_id)
+    if holiday is not None:
+        session.delete(holiday)
+        session.commit()
+
+
 @router.post("/settings/holidays")
 async def add_holiday(
     request: Request,
@@ -195,12 +217,7 @@ async def add_holiday(
     """Add a company holiday (idempotent on date) and re-render the rows."""
     d = _parse_date_field(on, "holiday")
     with get_session() as session:
-        exists = session.exec(
-            select(CompanyHoliday).where(CompanyHoliday.date == d)
-        ).first()
-        if exists is None:
-            session.add(CompanyHoliday(date=d, name=name.strip() or d.isoformat()))
-            session.commit()
+        _create_holiday(session, d, name)
         return _holiday_rows(request, session)
 
 
@@ -208,10 +225,7 @@ async def add_holiday(
 async def delete_holiday(request: Request, holiday_id: int) -> Response:
     """Delete a company holiday and re-render the rows."""
     with get_session() as session:
-        holiday = session.get(CompanyHoliday, holiday_id)
-        if holiday is not None:
-            session.delete(holiday)
-            session.commit()
+        _remove_holiday(session, holiday_id)
         return _holiday_rows(request, session)
 
 
@@ -226,6 +240,60 @@ def _tier_rows(request: Request, session) -> Response:
     )
 
 
+def _create_tier(
+    session, d: date, annual_days: float, annual_hours: float, label: str
+) -> None:
+    """Idempotent-on-start-date insert of an accrual tier. Shared by route + API."""
+    exists = session.exec(
+        select(AccrualTier).where(AccrualTier.starts_on == d)
+    ).first()
+    if exists is None:
+        session.add(
+            AccrualTier(
+                starts_on=d,
+                annual_days=annual_days,
+                annual_hours=annual_hours,
+                label=label.strip() or d.isoformat(),
+            )
+        )
+        session.commit()
+
+
+def _update_tier(
+    session,
+    tier_id: int,
+    d: date,
+    annual_days: float,
+    annual_hours: float,
+    label: str,
+) -> None:
+    tier = session.get(AccrualTier, tier_id)
+    if tier is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"tier {tier_id} not found",
+        )
+    tier.starts_on = d
+    tier.annual_days = annual_days
+    tier.annual_hours = annual_hours
+    tier.label = label.strip() or d.isoformat()
+    session.add(tier)
+    session.commit()
+
+
+def _remove_tier(session, tier_id: int) -> None:
+    """Delete a tier, guarding the last one (the engine needs at least a rate)."""
+    if len(_load_tiers(session)) <= 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="at least one accrual tier must remain",
+        )
+    tier = session.get(AccrualTier, tier_id)
+    if tier is not None:
+        session.delete(tier)
+        session.commit()
+
+
 @router.post("/settings/tiers")
 async def add_tier(
     request: Request,
@@ -237,19 +305,7 @@ async def add_tier(
     """Add an accrual tier (idempotent on start date) and re-render the rows."""
     d = _parse_date_field(starts_on, "tier start")
     with get_session() as session:
-        exists = session.exec(
-            select(AccrualTier).where(AccrualTier.starts_on == d)
-        ).first()
-        if exists is None:
-            session.add(
-                AccrualTier(
-                    starts_on=d,
-                    annual_days=annual_days,
-                    annual_hours=annual_hours,
-                    label=label.strip() or d.isoformat(),
-                )
-            )
-            session.commit()
+        _create_tier(session, d, annual_days, annual_hours, label)
         return _tier_rows(request, session)
 
 
@@ -265,18 +321,7 @@ async def edit_tier(
     """Edit an accrual tier in place and re-render the rows."""
     d = _parse_date_field(starts_on, "tier start")
     with get_session() as session:
-        tier = session.get(AccrualTier, tier_id)
-        if tier is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"tier {tier_id} not found",
-            )
-        tier.starts_on = d
-        tier.annual_days = annual_days
-        tier.annual_hours = annual_hours
-        tier.label = label.strip() or d.isoformat()
-        session.add(tier)
-        session.commit()
+        _update_tier(session, tier_id, d, annual_days, annual_hours, label)
         return _tier_rows(request, session)
 
 
@@ -284,14 +329,5 @@ async def edit_tier(
 async def delete_tier(request: Request, tier_id: int) -> Response:
     """Delete an accrual tier — but never the last one (engine needs a rate)."""
     with get_session() as session:
-        count = len(_load_tiers(session))
-        if count <= 1:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="at least one accrual tier must remain",
-            )
-        tier = session.get(AccrualTier, tier_id)
-        if tier is not None:
-            session.delete(tier)
-            session.commit()
+        _remove_tier(session, tier_id)
         return _tier_rows(request, session)

@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: 'Figtree', system-ui, sans-serif; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+  a { color: var(--primary); text-decoration: none; }
+  a:hover { color: var(--primary-strong); }
+  input, select, button, textarea { font-family: inherit; }
+  ::-webkit-scrollbar { height: 10px; width: 10px; }
+  ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 8px; }
+  input[type=date]::-webkit-calendar-picker-indicator { filter: var(--cal-filter); cursor: pointer; }
+  :root {
+    --bg:#eef3fa; --bg-elev:#ffffff; --surface:#ffffff; --surface-2:#f3f7fc;
+    --border:#dde5f0; --border-strong:#c4d1e3;
+    --text:#0d1b2e; --text-2:#54637a; --text-3:#8493a8;
+    --primary:#1e50e6; --primary-strong:#1740c4; --primary-soft:#e7ecff;
+    --teal:#0a9d92; --teal-soft:#d7f3ef; --mint:#0f9d63;
+    --danger:#e5484d; --danger-soft:#fdecec; --warn:#b26a00; --warn-soft:#fff2e0;
+    --current:#dde7ff; --current-bar:#1e50e6;
+    --shadow-sm:0 1px 2px rgba(13,27,46,.05);
+    --shadow:0 1px 2px rgba(13,27,46,.05), 0 10px 26px -14px rgba(13,27,46,.18);
+    --cal-filter:none;
+    --sidebar-display:flex; --topbar-display:none; --mnav-display:none;
+    --content-px:44px; --content-py:34px; --grid-min:12.5rem;
+    --acc-cols:40px minmax(130px,1.5fr) 96px 56px 50px 104px 100px;
+    --use-cols:110px 66px 132px minmax(120px,1fr) 92px 84px;
+    --yr-cols:80px repeat(5,1fr);
+    --hol-cols:130px 1fr 88px;
+    --tier-cols:150px 84px 92px minmax(140px,1.8fr) 80px;
+    --jtxt:flex-start; --jnum:flex-end; --lbl:none;
+    --thead-display:grid; --row-mb:0px; --row-pad:9px 14px; --row-border:0;
+    --row-radius:0; --row-bg:transparent; --row-shadow:none;
+  }
+  [data-theme="dark"] {
+    --bg:#070f1c; --bg-elev:#0c1728; --surface:#0f1e35; --surface-2:#122540;
+    --border:#1c3252; --border-strong:#294669;
+    --text:#e9f1fc; --text-2:#93a6c0; --text-3:#63799a;
+    --primary:#5088ff; --primary-strong:#79a3ff; --primary-soft:#12294f;
+    --teal:#2bd3c5; --teal-soft:#0d2d33; --mint:#43e3a8;
+    --danger:#ff6b6b; --danger-soft:#3a1a1e; --warn:#ffb74d; --warn-soft:#33260f;
+    --current:#14315e; --current-bar:#5088ff;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.3);
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 14px 34px -16px rgba(0,0,0,.7);
+    --cal-filter:invert(1) brightness(1.4);
+  }
+  @media (max-width: 900px) {
+    :root {
+      --sidebar-display:none; --topbar-display:flex; --mnav-display:flex;
+      --content-px:16px; --content-py:18px; --grid-min:9rem;
+      --acc-cols:1fr; --use-cols:1fr; --yr-cols:1fr; --hol-cols:1fr; --tier-cols:1fr;
+      --jtxt:space-between; --jnum:space-between; --lbl:block;
+      --thead-display:none; --row-mb:10px; --row-pad:12px 14px;
+      --row-border:1px solid var(--border); --row-radius:14px;
+      --row-bg:var(--surface); --row-shadow:var(--shadow-sm);
+    }
+  }
+  @keyframes epfade { from { opacity:0; transform: translateY(6px); } to { opacity:1; transform:none; } }
+</style>
+</helmet>
+<div data-theme="{{ theme }}" style="display:flex; min-height:100vh; background:var(--bg); color:var(--text); font-family:'Figtree',sans-serif;">
+
+  <!-- ============ SIDEBAR (desktop) ============ -->
+  <aside style="display:var(--sidebar-display); flex-direction:column; width:250px; flex:0 0 250px; position:sticky; top:0; height:100vh; background:var(--bg-elev); border-right:1px solid var(--border); padding:22px 16px;">
+    <div style="display:flex; align-items:center; gap:11px; padding:6px 8px 22px;">
+      <div style="width:34px; height:34px; border-radius:10px; background:linear-gradient(135deg,var(--primary),var(--teal)); display:flex; align-items:center; justify-content:center; box-shadow:var(--shadow-sm);">
+        <div style="width:11px; height:11px; border-radius:50%; border:2.5px solid #fff;"></div>
+      </div>
+      <div style="display:flex; flex-direction:column; line-height:1;">
+        <span style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:19px; letter-spacing:-.02em;">epoch</span>
+        <span style="font-size:11px; color:var(--text-3); margin-top:3px; letter-spacing:.04em;">PTO TRACKER</span>
+      </div>
+    </div>
+    <nav style="display:flex; flex-direction:column; gap:3px;">
+      <sc-for list="{{ nav }}" as="item" hint-placeholder-count="6">
+        <a href="#" onClick="{{ item.go }}" style="{{ item.navStyle }}">
+          <span style="width:9px; height:9px; border-radius:3px; background:{{ item.dot }}; flex:0 0 auto;"></span>
+          <span>{{ item.label }}</span>
+        </a>
+      </sc-for>
+    </nav>
+    <div style="margin-top:auto; padding-top:18px;">
+      <button type="button" onClick="{{ toggleTheme }}" style="width:100%; display:flex; align-items:center; justify-content:space-between; gap:10px; padding:11px 14px; border-radius:12px; border:1px solid var(--border); background:var(--surface-2); color:var(--text-2); font-size:13.5px; font-weight:600; cursor:pointer;">
+        <span>{{ themeLabel }}</span>
+        <span style="font-family:'Space Grotesk'; font-size:12px; color:var(--text-3);">{{ themeHint }}</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <div style="flex:1 1 auto; min-width:0; display:flex; flex-direction:column;">
+
+    <!-- Mobile top bar -->
+    <header style="display:var(--topbar-display); align-items:center; justify-content:space-between; padding:12px 16px; background:var(--bg-elev); border-bottom:1px solid var(--border); position:sticky; top:0; z-index:20;">
+      <div style="display:flex; align-items:center; gap:9px;">
+        <div style="width:28px; height:28px; border-radius:8px; background:linear-gradient(135deg,var(--primary),var(--teal)); display:flex; align-items:center; justify-content:center;">
+          <div style="width:9px; height:9px; border-radius:50%; border:2px solid #fff;"></div>
+        </div>
+        <span style="font-family:'Space Grotesk'; font-weight:700; font-size:17px;">epoch</span>
+      </div>
+      <button type="button" onClick="{{ toggleTheme }}" style="padding:8px 12px; border-radius:10px; border:1px solid var(--border); background:var(--surface-2); color:var(--text-2); font-size:12.5px; font-weight:600; cursor:pointer;">{{ themeHint }}</button>
+    </header>
+
+    <!-- Mobile pill nav -->
+    <nav style="display:var(--mnav-display); gap:8px; overflow-x:auto; padding:12px 16px; background:var(--bg-elev); border-bottom:1px solid var(--border); position:sticky; top:53px; z-index:19; -webkit-overflow-scrolling:touch;">
+      <sc-for list="{{ nav }}" as="item" hint-placeholder-count="6">
+        <a href="#" onClick="{{ item.go }}" style="{{ item.pillStyle }}">{{ item.label }}</a>
+      </sc-for>
+    </nav>
+
+    <main style="flex:1; padding:var(--content-py) var(--content-px); max-width:1180px; width:100%; margin:0 auto;">
+
+      <!-- ======== DASHBOARD ======== -->
+      <sc-if value="{{ isDashboard }}" hint-placeholder-val="{{ true }}">
+      <section style="animation:epfade .3s ease;">
+        <div style="display:flex; align-items:flex-end; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:22px;">
+          <div>
+            <h1 style="font-family:'Space Grotesk'; font-size:29px; font-weight:700; letter-spacing:-.025em; margin:0 0 4px;">Dashboard</h1>
+            <p style="margin:0; color:var(--text-2); font-size:14.5px;">PTO accrual & usage as of {{ today }}.</p>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px; padding:8px 14px; border-radius:12px; background:var(--teal-soft); color:var(--teal); font-weight:600; font-size:13px;">
+            <span style="width:8px; height:8px; border-radius:50%; background:var(--teal);"></span>
+            Pay period #94 in progress
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(var(--grid-min),1fr)); gap:14px; margin-bottom:22px;">
+          <sc-for list="{{ stats }}" as="s" hint-placeholder-count="6">
+            <article style="{{ s.cardStyle }}">
+              <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+                <span style="width:26px; height:26px; border-radius:8px; background:{{ s.iconBg }}; display:flex; align-items:center; justify-content:center;">
+                  <span style="width:8px; height:8px; border-radius:{{ s.iconShape }}; background:{{ s.iconColor }};"></span>
+                </span>
+                <span style="font-size:12px; font-weight:600; color:var(--text-2); letter-spacing:.02em;">{{ s.label }}</span>
+              </div>
+              <div style="font-family:'Space Grotesk'; font-size:32px; font-weight:700; line-height:1; letter-spacing:-.02em; color:{{ s.valueColor }}; font-variant-numeric:tabular-nums;">{{ s.value }}</div>
+              <div style="font-size:12.5px; color:var(--text-3); margin-top:7px;">{{ s.sub }}</div>
+            </article>
+          </sc-for>
+        </div>
+
+        <article style="background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:22px 22px 18px; box-shadow:var(--shadow);">
+          <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:18px;">
+            <div>
+              <h2 style="font-family:'Space Grotesk'; font-size:17px; font-weight:600; margin:0;">Balance over time</h2>
+              <p style="margin:4px 0 0; color:var(--text-3); font-size:12.5px;">End-of-period balance, hours used, and the all-time peak.</p>
+            </div>
+            <div style="display:flex; gap:6px; background:var(--surface-2); padding:4px; border-radius:11px;">
+              <sc-for list="{{ ranges }}" as="r" hint-placeholder-count="3">
+                <button type="button" onClick="{{ r.set }}" style="{{ r.btnStyle }}">{{ r.label }}</button>
+              </sc-for>
+            </div>
+          </div>
+          <div style="position:relative; width:100%; height:min(52vh,420px);">
+            <canvas id="epoch-balance-chart"></canvas>
+          </div>
+        </article>
+      </section>
+      </sc-if>
+
+      <!-- ======== ACCRUALS ======== -->
+      <sc-if value="{{ isAccruals }}" hint-placeholder-val="{{ true }}">
+      <section style="animation:epfade .3s ease;">
+        <div style="margin-bottom:18px;">
+          <h1 style="font-family:'Space Grotesk'; font-size:29px; font-weight:700; letter-spacing:-.025em; margin:0 0 4px;">Accruals</h1>
+          <p style="margin:0; color:var(--text-2); font-size:14.5px;">One row per pay period — accrued on the fly from the rules, never stored.</p>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:16px;">
+          <label style="display:flex; flex-direction:column; gap:5px; font-size:12.5px; font-weight:600; color:var(--text-2);">Year
+            <select style="{{ inputStyle }}">
+              <option>All periods</option><option selected>2026</option><option>2025</option><option>2024</option><option>2023</option>
+            </select>
+          </label>
+          <div style="display:flex; gap:16px; margin-left:auto; align-items:center; flex-wrap:wrap;">
+            <sc-for list="{{ accLegend }}" as="l" hint-placeholder-count="3">
+              <span style="display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--text-2); font-weight:500;">
+                <span style="width:10px; height:10px; border-radius:3px; background:{{ l.color }};"></span>{{ l.label }}
+              </span>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="background:var(--surface); border:1px solid var(--border); border-radius:18px; box-shadow:var(--shadow); overflow:hidden;">
+          <div style="overflow-x:auto;">
+          <div style="min-width:var(--acc-min, auto);">
+            <div style="display:var(--thead-display); grid-template-columns:var(--acc-cols); padding:13px 14px; border-bottom:1px solid var(--border); background:var(--surface-2); font-size:11.5px; font-weight:700; color:var(--text-3); letter-spacing:.04em; text-transform:uppercase;">
+              <div>#</div><div>Pay period</div><div>Pay date</div><div style="text-align:right;">PTO</div><div style="text-align:right;">PH</div><div style="text-align:right;">Balance</div><div style="text-align:right;">Status</div>
+            </div>
+            <sc-for list="{{ accruals }}" as="a" hint-placeholder-count="8">
+              <div style="{{ a.rowStyle }}">
+                <div style="display:flex; align-items:center; justify-content:var(--jtxt); gap:10px;"><span style="display:var(--lbl); font-size:11.5px; color:var(--text-3); font-weight:600;">Period</span><span style="font-family:'Space Grotesk'; font-weight:600; color:var(--text-3); font-size:13px;">{{ a.index }}</span></div>
+                <div style="display:flex; align-items:center; justify-content:var(--jtxt); gap:10px; min-width:0;"><span style="display:var(--lbl); font-size:11.5px; color:var(--text-3); font-weight:600;">Pay period</span><span style="font-weight:600; color:{{ a.textColor }};">{{ a.period }}</span></div>
+                <div style="display:flex; align-items:center; justify-content:var(--jtxt); gap:10px;"><span style="display:var(--lbl); font-size:11.5px; color:var(--text-3); font-weight:600;">Pay date</span><span style="color:var(--text-2); font-size:13.5px;">{{ a.pay }}</span></div>
+                <div style="display:flex; align-items:center; justify-content:var(--jnum); gap:10px;"><span style="display:var(--lbl); font-size:11.5px; color:var(--text-3); font-weight:600;">PTO used</span><span style="font-family:'Space Grotesk'; color:{{ a.ptoColor }}; font-weight:600; font-variant-numeric:tabular-nums;">{{ a.pto }}</span></div>
+                <div style="display:flex; align-items:center; justify-content:var(--jnum); gap:10px;"><span style="display:var(--lbl); font-size:11.5px; color:var(--text-3); font-weight:600;">PH used</span><span style="font-family:'Space Grotesk'; color:{{ a.phColor }}; font-weight:600; font-variant-numeric:tabular-nums;">{{ a.ph }}</span></div>
+                <div style="display:flex; align-items:center; justify-content:var(--jnum); gap:10px;"><span style="display:var(--lbl); font-size:11.5px; color:var(--text-3); font-weight:600;">Balance</span><span style="font-family:'Space Grotesk'; font-weight:700; font-variant-numeric:tabular-nums; color:{{ a.balColor }};">{{ a.balance }}</span></div>
+                <div style="display:flex; align-items:center; justify-content:var(--jnum); gap:10px;"><span style="display:var(--lbl); font-size:11.5px; color:var(--text-3); font-weight:600;">Status</span><span style="{{ a.badgeStyle }}">{{ a.badge }}</span></div>
+              </div>
+            </sc-for>
+          </div>
+          </div>
+        </div>
+      </section>
+      </sc-if>
+
+      <!-- ======== USAGE ======== -->
+      <sc-if value="{{ isUsage }}" hint-placeholder-val="{{ true }}">
+      <section style="animation:epfade .3s ease;">
+        <div style="margin-bottom:18px;">
+          <h1 style="font-family:'Space Grotesk'; font-size:29px; font-weight:700; letter-spacing:-.025em; margin:0 0 4px;">Usage</h1>
+          <p style="margin:0; color:var(--text-2); font-size:14.5px;">Log PTO and personal-holiday days. A range expands to one row per working day.</p>
+        </div>
+
+        <form onSubmit="{{ onAddUsage }}" style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:16px 18px; margin-bottom:16px; box-shadow:var(--shadow-sm);">
+          <label style="display:flex; flex-direction:column; gap:5px; font-size:12px; font-weight:600; color:var(--text-2);">Start<input name="start" type="date" value="2026-08-19" style="{{ inputStyle }}"></label>
+          <label style="display:flex; flex-direction:column; gap:5px; font-size:12px; font-weight:600; color:var(--text-2);">End<input name="end" type="date" value="2026-08-21" style="{{ inputStyle }}"></label>
+          <label style="display:flex; flex-direction:column; gap:5px; font-size:12px; font-weight:600; color:var(--text-2);">Type<select name="type" style="{{ inputStyle }}"><option value="pto">PTO</option><option value="personal_holiday">Personal Holiday</option></select></label>
+          <label style="display:flex; flex-direction:column; gap:5px; font-size:12px; font-weight:600; color:var(--text-2); flex:1 1 160px;">Reason<input name="reason" type="text" placeholder="optional" style="{{ inputStyle }}"></label>
+          <button type="submit" style="{{ primaryBtn }}">Add days</button>
+        </form>
+
+        <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px;">
+          <sc-for list="{{ usageFilters }}" as="f" hint-placeholder-count="3">
+            <label style="display:flex; flex-direction:column; gap:5px; font-size:12px; font-weight:600; color:var(--text-2);">{{ f.label }}<select style="{{ inputStyle }}"><sc-for list="{{ f.options }}" as="o" hint-placeholder-count="3"><option>{{ o }}</option></sc-for></select></label>
+          </sc-for>
+        </div>
+
+        <div style="background:var(--surface); border:1px solid var(--border); border-radius:18px; box-shadow:var(--shadow); overflow:hidden;">
+          <div style="overflow-x:auto;">
+            <div style="display:var(--thead-display); grid-template-columns:var(--use-cols); padding:13px 14px; border-bottom:1px solid var(--border); background:var(--surface-2); font-size:11.5px; font-weight:700; color:var(--text-3); letter-spacing:.04em; text-transform:uppercase;">
+              <div>Date</div><div style="text-align:right;">Hours</div><div>Type</div><div>Reason</div><div style="text-align:center;">Requested</div><div style="text-align:right;">Actions</div>
+            </div>
+            <sc-for list="{{ usageRows }}" as="u" hint-placeholder-count="8">
+              <div style="{{ u.rowStyle }}">
+                <div style="display:flex; align-items:center; justify-content:var(--jtxt); gap:10px;"><span style="display:var(--lbl); font-size:11.5px; color:var(--text-3); font-weight:600;">Date</span><span style="font-family:'Space Grotesk'; font-weight:600;">{{ u.date }}</span></div>
+                <div style="display:flex; align-items:center; justify-content:var(--jnum); gap:10px;"><span style="display:var(--lbl); font-size:11.5px; color:var(--text-3); font-weight:600;">Hours</span><span style="font-family:'Space Grotesk'; color:var(--text-2); font-variant-numeric:tabular-nums;">{{ u.hours }}</span></div>
+                <div style="display:flex; align-items:center; justify-content:var(--jtxt); gap:10px;"><span style="display:var(--lbl); font-size:11.5px; color:var(--text-3); font-weight:600;">Type</span><span style="{{ u.typeStyle }}">{{ u.typeLabel }}</span></div>
+                <div style="display:flex; align-items:center; justify-content:var(--jtxt); gap:10px; min-width:0;"><span style="display:var(--lbl); font-size:11.5px; color:var(--text-3); font-weight:600;">Reason</span><span style="color:var(--text-2); overflow:hidden; text-overflow:ellipsis;">{{ u.reason }}</span></div>
+                <div style="display:flex; align-items:center; justify-content:var(--jctr, center); gap:10px;"><span style="display:var(--lbl); font-size:11.5px; color:var(--text-3); font-weight:600;">Requested</span><button type="button" onClick="{{ u.toggle }}" style="{{ u.reqStyle }}">{{ u.reqLabel }}</button></div>
+                <div style="display:flex; align-items:center; justify-content:var(--jnum); gap:8px;"><span style="display:var(--lbl); font-size:11.5px; color:var(--text-3); font-weight:600;">Actions</span><span style="display:flex; gap:8px;"><button type="button" onClick="{{ u.del }}" style="{{ ghostBtn }}">Delete</button></span></div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </section>
+      </sc-if>
+
+      <!-- ======== PROJECTION ======== -->
+      <sc-if value="{{ isProjection }}" hint-placeholder-val="{{ true }}">
+      <section style="animation:epfade .3s ease;">
+        <div style="margin-bottom:18px;">
+          <h1 style="font-family:'Space Grotesk'; font-size:29px; font-weight:700; letter-spacing:-.025em; margin:0 0 4px;">Projection</h1>
+          <p style="margin:0; color:var(--text-2); font-size:14.5px; max-width:60ch;">Pick any date — past or future — to see the projected PTO balance and any hours forfeited between now and then.</p>
+        </div>
+
+        <div style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap; margin-bottom:18px;">
+          <label style="display:flex; flex-direction:column; gap:5px; font-size:12px; font-weight:600; color:var(--text-2);">Projection date<input type="date" value="{{ projDate }}" onChange="{{ onProjDate }}" style="{{ inputStyle }}"></label>
+          <span style="{{ projTagStyle }}">{{ projTag }}</span>
+        </div>
+
+        <article style="background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:22px; box-shadow:var(--shadow); margin-bottom:26px;">
+          <div style="font-weight:700; font-family:'Space Grotesk'; font-size:16px; margin-bottom:16px;">Projected balance on {{ projDate }}</div>
+          <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(var(--grid-min),1fr)); gap:14px;">
+            <sc-for list="{{ projStats }}" as="p" hint-placeholder-count="3">
+              <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:14px; padding:16px;">
+                <div style="font-size:12px; font-weight:600; color:var(--text-2); margin-bottom:8px;">{{ p.label }}</div>
+                <div style="font-family:'Space Grotesk'; font-size:27px; font-weight:700; color:{{ p.color }}; font-variant-numeric:tabular-nums;">{{ p.value }}</div>
+                <div style="font-size:12px; color:var(--text-3); margin-top:6px;">{{ p.sub }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="{{ projNoteStyle }}">{{ projNote }}</div>
+        </article>
+
+        <h2 style="font-family:'Space Grotesk'; font-size:18px; font-weight:600; margin:0 0 4px;">Per-year stats</h2>
+        <p style="margin:0 0 14px; color:var(--text-3); font-size:12.5px; max-width:70ch;">Accrual, usage, and forfeitures grouped by calendar year. Future years are projected from the accrual rules assuming no further usage.</p>
+        <div style="background:var(--surface); border:1px solid var(--border); border-radius:18px; box-shadow:var(--shadow); overflow:hidden;">
+          <div style="overflow-x:auto;">
+            <div style="display:var(--thead-display); grid-template-columns:var(--yr-cols); padding:13px 14px; border-bottom:1px solid var(--border); background:var(--surface-2); font-size:11.5px; font-weight:700; color:var(--text-3); letter-spacing:.04em; text-transform:uppercase;">
+              <div>Year</div><div style="text-align:right;">Accrued</div><div style="text-align:right;">PTO used</div><div style="text-align:right;">PH used</div><div style="text-align:right;">Lost·cap</div><div style="text-align:right;">Lost·roll</div>
+            </div>
+            <sc-for list="{{ yearStats }}" as="y" hint-placeholder-count="5">
+              <div style="{{ y.rowStyle }}">
+                <div style="display:flex; align-items:center; justify-content:var(--jtxt); gap:10px;"><span style="display:var(--lbl); font-size:11.5px; color:var(--text-3); font-weight:600;">Year</span><span style="font-family:'Space Grotesk'; font-weight:700;">{{ y.year }}</span></div>
+                <div style="display:flex; align-items:center; justify-content:var(--jnum); gap:10px;"><span style="display:var(--lbl); font-size:11.5px; color:var(--text-3); font-weight:600;">Accrued</span><span style="font-family:'Space Grotesk'; font-variant-numeric:tabular-nums; color:var(--text-2);">{{ y.accrued }}</span></div>
+                <div style="display:flex; align-items:center; justify-content:var(--jnum); gap:10px;"><span style="display:var(--lbl); font-size:11.5px; color:var(--text-3); font-weight:600;">PTO used</span><span style="font-family:'Space Grotesk'; font-variant-numeric:tabular-nums; color:var(--text-2);">{{ y.pto }}</span></div>
+                <div style="display:flex; align-items:center; justify-content:var(--jnum); gap:10px;"><span style="display:var(--lbl); font-size:11.5px; color:var(--text-3); font-weight:600;">PH used</span><span style="font-family:'Space Grotesk'; font-variant-numeric:tabular-nums; color:var(--text-2);">{{ y.ph }}</span></div>
+                <div style="display:flex; align-items:center; justify-content:var(--jnum); gap:10px;"><span style="display:var(--lbl); font-size:11.5px; color:var(--text-3); font-weight:600;">Lost·cap</span><span style="font-family:'Space Grotesk'; font-variant-numeric:tabular-nums; color:{{ y.capColor }};">{{ y.lostCap }}</span></div>
+                <div style="display:flex; align-items:center; justify-content:var(--jnum); gap:10px;"><span style="display:var(--lbl); font-size:11.5px; color:var(--text-3); font-weight:600;">Lost·roll</span><span style="font-family:'Space Grotesk'; font-variant-numeric:tabular-nums; color:{{ y.rollColor }};">{{ y.lostRoll }}</span></div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </section>
+      </sc-if>
+
+      <!-- ======== SETTINGS ======== -->
+      <sc-if value="{{ isSettings }}" hint-placeholder-val="{{ true }}">
+      <section style="animation:epfade .3s ease;">
+        <div style="margin-bottom:20px;">
+          <h1 style="font-family:'Space Grotesk'; font-size:29px; font-weight:700; letter-spacing:-.025em; margin:0 0 4px;">Settings</h1>
+          <p style="margin:0; color:var(--text-2); font-size:14.5px; max-width:66ch;">Engine constants, company holidays, and accrual tiers — the single source of truth for the accrual fold.</p>
+        </div>
+
+        <h2 style="font-family:'Space Grotesk'; font-size:18px; font-weight:600; margin:0 0 14px;">Engine constants</h2>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(14rem,1fr)); gap:14px; margin-bottom:16px;">
+          <sc-for list="{{ constants }}" as="c" hint-placeholder-count="6">
+            <label style="display:flex; flex-direction:column; gap:6px; background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:14px 16px; box-shadow:var(--shadow-sm);">
+              <span style="font-size:12.5px; font-weight:600; color:var(--text);">{{ c.label }}</span>
+              <input value="{{ c.value }}" style="{{ inputStyle }}">
+              <span style="font-size:11.5px; color:var(--text-3);">{{ c.help }}</span>
+            </label>
+          </sc-for>
+        </div>
+        <button type="button" style="{{ primaryBtn }}">Save constants</button>
+
+        <h2 style="font-family:'Space Grotesk'; font-size:18px; font-weight:600; margin:30px 0 4px;">Company holidays</h2>
+        <p style="margin:0 0 14px; color:var(--text-3); font-size:12.5px;">Skipped when a usage range is expanded into per-day rows.</p>
+        <div style="background:var(--surface); border:1px solid var(--border); border-radius:18px; box-shadow:var(--shadow); overflow:hidden; margin-bottom:14px;">
+          <div style="overflow-x:auto;">
+            <div style="display:var(--thead-display); grid-template-columns:var(--hol-cols); padding:12px 14px; border-bottom:1px solid var(--border); background:var(--surface-2); font-size:11.5px; font-weight:700; color:var(--text-3); letter-spacing:.04em; text-transform:uppercase;">
+              <div>Date</div><div>Name</div><div style="text-align:right;">·</div>
+            </div>
+            <sc-for list="{{ holidays }}" as="h" hint-placeholder-count="4">
+              <div style="{{ rowBase }}">
+                <div style="display:flex; align-items:center; justify-content:var(--jtxt); gap:10px;"><span style="display:var(--lbl); font-size:11.5px; color:var(--text-3); font-weight:600;">Date</span><span style="font-family:'Space Grotesk'; font-weight:600;">{{ h.date }}</span></div>
+                <div style="display:flex; align-items:center; justify-content:var(--jtxt); gap:10px;"><span style="display:var(--lbl); font-size:11.5px; color:var(--text-3); font-weight:600;">Name</span><span style="color:var(--text-2);">{{ h.name }}</span></div>
+                <div style="display:flex; align-items:center; justify-content:var(--jnum);"><button type="button" onClick="{{ h.del }}" style="{{ ghostBtn }}">Delete</button></div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <h2 style="font-family:'Space Grotesk'; font-size:18px; font-weight:600; margin:26px 0 4px;">Accrual tiers</h2>
+        <p style="margin:0 0 14px; color:var(--text-3); font-size:12.5px; max-width:70ch;">The rate for a period is the tier whose start date is the latest one on or before the period's end. At least one tier must remain.</p>
+        <div style="background:var(--surface); border:1px solid var(--border); border-radius:18px; box-shadow:var(--shadow); overflow:hidden;">
+          <div style="overflow-x:auto;">
+            <div style="display:var(--thead-display); grid-template-columns:var(--tier-cols); padding:12px 14px; border-bottom:1px solid var(--border); background:var(--surface-2); font-size:11.5px; font-weight:700; color:var(--text-3); letter-spacing:.04em; text-transform:uppercase;">
+              <div>Starts on</div><div style="text-align:right;">Days</div><div style="text-align:right;">Hours</div><div>Label</div><div style="text-align:right;">·</div>
+            </div>
+            <sc-for list="{{ tiers }}" as="t" hint-placeholder-count="3">
+              <div style="{{ t.rowStyle }}">
+                <div style="display:flex; align-items:center; justify-content:var(--jtxt); gap:10px;"><span style="display:var(--lbl); font-size:11.5px; color:var(--text-3); font-weight:600;">Starts on</span><span style="font-family:'Space Grotesk'; font-weight:600;">{{ t.starts }}</span></div>
+                <div style="display:flex; align-items:center; justify-content:var(--jnum); gap:10px;"><span style="display:var(--lbl); font-size:11.5px; color:var(--text-3); font-weight:600;">Annual days</span><span style="font-family:'Space Grotesk'; font-variant-numeric:tabular-nums;">{{ t.days }}</span></div>
+                <div style="display:flex; align-items:center; justify-content:var(--jnum); gap:10px;"><span style="display:var(--lbl); font-size:11.5px; color:var(--text-3); font-weight:600;">Annual hours</span><span style="font-family:'Space Grotesk'; font-variant-numeric:tabular-nums;">{{ t.hours }}</span></div>
+                <div style="display:flex; align-items:center; justify-content:var(--jtxt); gap:10px;"><span style="display:var(--lbl); font-size:11.5px; color:var(--text-3); font-weight:600;">Label</span><span style="color:var(--text-2);">{{ t.label }}</span></div>
+                <div style="display:flex; align-items:center; justify-content:var(--jnum);"><span style="{{ t.badgeStyle }}">{{ t.badge }}</span></div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </section>
+      </sc-if>
+
+      <!-- ======== IMPORT ======== -->
+      <sc-if value="{{ isImport }}" hint-placeholder-val="{{ true }}">
+      <section style="animation:epfade .3s ease;">
+        <div style="margin-bottom:20px;">
+          <h1 style="font-family:'Space Grotesk'; font-size:29px; font-weight:700; letter-spacing:-.025em; margin:0 0 4px;">Import / Export</h1>
+          <p style="margin:0; color:var(--text-2); font-size:14.5px; max-width:66ch;">Load the usage log from a CSV export of the sheet, or back up the current log in the same format.</p>
+        </div>
+
+        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr)); gap:16px; margin-bottom:24px;">
+          <div style="background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:22px; box-shadow:var(--shadow);">
+            <h2 style="font-family:'Space Grotesk'; font-size:16px; font-weight:600; margin:0 0 14px;">Import CSV</h2>
+            <div style="border:2px dashed var(--border-strong); border-radius:14px; padding:34px 20px; text-align:center; background:var(--surface-2);">
+              <div style="width:46px; height:46px; border-radius:13px; background:var(--primary-soft); display:flex; align-items:center; justify-content:center; margin:0 auto 12px;">
+                <span style="width:16px; height:16px; border:2.5px solid var(--primary); border-top:0; border-right:0; transform:rotate(-45deg); margin-top:-4px;"></span>
+              </div>
+              <div style="font-weight:600; font-size:14px;">Drop your CSV here</div>
+              <div style="font-size:12.5px; color:var(--text-3); margin-top:4px;">or click to browse — Date, Hours, Type, Reason, Requested</div>
+              <button type="button" style="{{ primaryBtn }}; margin-top:16px;">Choose file</button>
+            </div>
+          </div>
+          <div style="background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:22px; box-shadow:var(--shadow);">
+            <h2 style="font-family:'Space Grotesk'; font-size:16px; font-weight:600; margin:0 0 14px;">Export CSV</h2>
+            <p style="color:var(--text-2); font-size:13.5px; line-height:1.6; margin:0 0 16px;">Download the whole usage log in the import format — use it as a backup. Accruals are always recomputed, never exported.</p>
+            <button type="button" style="{{ secondaryBtn }}">Download usage_export.csv</button>
+          </div>
+        </div>
+
+        <div style="background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:22px; box-shadow:var(--shadow);">
+          <h2 style="font-family:'Space Grotesk'; font-size:16px; font-weight:600; margin:0 0 14px;">CSV format</h2>
+          <div style="display:flex; flex-direction:column; gap:12px;">
+            <sc-for list="{{ csvFormat }}" as="f" hint-placeholder-count="4">
+              <div style="display:flex; gap:12px; align-items:flex-start;">
+                <span style="width:7px; height:7px; border-radius:50%; background:var(--teal); margin-top:7px; flex:0 0 auto;"></span>
+                <div style="font-size:13.5px; color:var(--text-2); line-height:1.55;"><strong style="color:var(--text);">{{ f.title }}</strong> — {{ f.body }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </section>
+      </sc-if>
+
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;100%&quot;,&quot;height&quot;:820},&quot;defaultTheme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;light&quot;,&quot;tsType&quot;:&quot;'light' | 'dark'&quot;,&quot;section&quot;:&quot;Appearance&quot;},&quot;showCapLine&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Dashboard chart&quot;}}">
+class Component extends DCLogic {
+  state = {
+    theme: 'light',
+    page: 'dashboard',
+    chartRange: 'all',
+    projDate: '2026-12-31',
+    usage: [
+      { id: 18, date: '2026-08-18', hours: 8, type: 'pto', reason: 'Cruise', requested: true },
+      { id: 17, date: '2026-08-17', hours: 8, type: 'pto', reason: 'Cruise', requested: true },
+      { id: 13, date: '2026-08-13', hours: 8, type: 'pto', reason: 'Cruise', requested: true },
+      { id: 12, date: '2026-08-12', hours: 8, type: 'pto', reason: 'Cruise', requested: true },
+      { id: 11, date: '2026-08-11', hours: 8, type: 'pto', reason: 'Cruise', requested: true },
+      { id: 10, date: '2026-08-10', hours: 8, type: 'pto', reason: 'Cruise', requested: true },
+      { id: 7, date: '2026-08-07', hours: 8, type: 'pto', reason: 'Cruise', requested: true },
+      { id: 6, date: '2026-08-06', hours: 8, type: 'pto', reason: 'Cruise', requested: true },
+      { id: 3, date: '2026-07-06', hours: 8, type: 'pto', reason: 'Long weekend', requested: true },
+      { id: 2, date: '2026-05-11', hours: 8, type: 'pto', reason: 'Doctor', requested: false },
+      { id: 1, date: '2026-03-16', hours: 8, type: 'pto', reason: 'Ski trip', requested: true },
+      { id: 0, date: '2026-03-02', hours: 16, type: 'personal_holiday', reason: 'Personal', requested: true },
+    ],
+    holidays: [
+      { id: 1, date: '2026-01-01', name: "New Year's Day" },
+      { id: 2, date: '2026-05-25', name: 'Memorial Day' },
+      { id: 3, date: '2026-07-03', name: 'Independence Day (obs.)' },
+      { id: 4, date: '2026-11-26', name: 'Thanksgiving' },
+      { id: 5, date: '2026-12-25', name: 'Christmas Day' },
+    ],
+    tiers: [
+      { id: 1, starts: '2021-01-11', days: 22, hours: 176, label: '22 days/yr (base)', current: true },
+      { id: 2, starts: '2026-01-11', days: 27, hours: 216, label: '27 days/yr (5 years)', current: false },
+      { id: 3, starts: '2031-01-11', days: 32, hours: 256, label: '32 days/yr (10 years)', current: false },
+    ],
+  };
+
+  componentDidMount() {
+    let set = false;
+    try { const t = localStorage.getItem('epoch-theme'); if (t === 'dark' || t === 'light') { this.setState({ theme: t }); set = true; } } catch (e) {}
+    if (!set && (this.props.defaultTheme === 'dark' || this.props.defaultTheme === 'light')) this.setState({ theme: this.props.defaultTheme });
+    this._startWatch();
+  }
+  _startWatch = () => {
+    if (this._watch || typeof setInterval === 'undefined') return;
+    this._watch = setInterval(() => this._syncChart(), 500);
+  };
+  componentWillUnmount() { if (this._watch) clearInterval(this._watch); }
+  componentDidUpdate() { this._syncChart(); }
+
+  toggleTheme = () => {
+    const t = this.state.theme === 'dark' ? 'light' : 'dark';
+    try { localStorage.setItem('epoch-theme', t); } catch (e) {}
+    this.setState({ theme: t });
+  };
+  go = (p) => (e) => { if (e) e.preventDefault(); this.setState({ page: p }); if (typeof window !== 'undefined') window.scrollTo(0, 0); };
+  setRange = (r) => () => this.setState({ chartRange: r });
+
+  toggleReq = (id) => () => this.setState(s => ({ usage: s.usage.map(u => u.id === id ? { ...u, requested: !u.requested } : u) }));
+  delUsage = (id) => () => this.setState(s => ({ usage: s.usage.filter(u => u.id !== id) }));
+  onAddUsage = (e) => {
+    e.preventDefault();
+    const f = e.target;
+    const start = f.start.value, type = f.type.value, reason = f.reason.value;
+    if (!start) return;
+    const nid = Math.max(0, ...this.state.usage.map(u => u.id)) + 1;
+    const row = { id: nid, date: start, hours: type === 'personal_holiday' ? 8 : 8, type, reason: reason || (type === 'personal_holiday' ? 'Personal' : ''), requested: false };
+    this.setState(s => ({ usage: [row, ...s.usage] }));
+    f.reason.value = '';
+  };
+  delHoliday = (id) => () => this.setState(s => ({ holidays: s.holidays.filter(h => h.id !== id) }));
+  onProjDate = (e) => this.setState({ projDate: e.target.value });
+
+  // ---- chart ----
+  _series() {
+    const anchor = new Date(2023, 0, 9);
+    const rate = 6.769;
+    // usage by period index (offset from anchor), approximating the sheet shape
+    const usedMap = { 5: 8, 6: 8, 12: 16, 18: 8, 26: 36, 28: 8, 33: 24, 45: 24, 46: 24, 50: 4, 57: 12, 58: 24, 66: 24, 67: 32, 68: 24, 79: 8, 80: 8, 88: 16, 90: 16, 91: 8, 91.5: 8 };
+    const phMap = { 5: 8, 33: 16, 69: 16, 88: 16 };
+    const labels = [], balance = [], ptoUsed = [], phUsed = [];
+    let bal = 8;
+    const cap = 360;
+    const nPeriods = 92;
+    let todayIndex = 0;
+    const current = new Date(2026, 6, 6);
+    for (let i = 0; i < nPeriods; i++) {
+      const d = new Date(anchor.getTime() + i * 14 * 86400000);
+      bal = Math.min(cap, bal + rate);
+      const used = usedMap[i] || 0;
+      const ph = phMap[i] || 0;
+      bal = Math.max(0, bal - used);
+      labels.push((d.getMonth() + 1) + '/' + d.getDate() + '/' + String(d.getFullYear()).slice(2));
+      balance.push(Math.round(bal * 100) / 100);
+      ptoUsed.push(used);
+      phUsed.push(ph);
+      if (Math.abs(d.getTime() - current.getTime()) < 7 * 86400000) todayIndex = i;
+    }
+    return { labels, balance, ptoUsed, phUsed, max: 137.23, cap, todayIndex };
+  }
+  _pal() {
+    const dark = this.state.theme === 'dark';
+    // Cool-dominant, on-scheme: cobalt balance + teal peak (what you HAVE),
+    // coral + amber used bars (what you SPEND).
+    return dark
+      ? { balance: '#5088ff', pto: '#ff8a5c', ph: '#ffc94d', max: '#2bd3c5', band: 'rgba(80,136,255,0.22)', grid: '#1c3252', axis: '#63799a', ink: '#93a6c0' }
+      : { balance: '#1e50e6', pto: '#e26a3c', ph: '#d99311', max: '#0a9d92', band: 'rgba(30,80,230,0.12)', grid: '#e6edf6', axis: '#8493a8', ink: '#54637a' };
+  }
+  _slice(s) {
+    const r = this.state.chartRange;
+    if (r === 'all') return s;
+    let from = 0;
+    if (r === 'ytd') from = s.labels.findIndex(l => l.endsWith('/26'));
+    if (r === '1yr') from = Math.max(0, s.labels.length - 26);
+    if (from < 0) from = 0;
+    const cut = (arr) => arr.slice(from);
+    return { labels: cut(s.labels), balance: cut(s.balance), ptoUsed: cut(s.ptoUsed), phUsed: cut(s.phUsed), max: s.max, cap: s.cap, todayIndex: s.todayIndex - from };
+  }
+  _syncChart() {
+    if (this.state.page !== 'dashboard') { if (this._chart) { this._chart.destroy(); this._chart = null; } return; }
+    if (typeof window === 'undefined') return;
+    const canvas = document.getElementById('epoch-balance-chart');
+    if (!canvas) return;
+    if (typeof Chart === 'undefined') { setTimeout(() => this._syncChart(), 200); return; }
+    const live = (typeof Chart.getChart === 'function') ? Chart.getChart(canvas) : this._chart;
+    if (live && live !== this._chart) { try { live.destroy(); } catch (e) {} }
+    const key = this.state.theme + '|' + this.state.chartRange + '|' + (this.props.showCapLine ? 'cap' : '');
+    const healthy = this._chart && live === this._chart && canvas.isConnected;
+    if (healthy && this._chartKey === key) return;
+    if (this._chart) { try { this._chart.destroy(); } catch (e) {} this._chart = null; }
+    this._chartKey = key;
+    const c = this._pal();
+    const s = this._slice(this._series());
+    const n = s.labels.length;
+    const maxLine = new Array(n).fill(s.max);
+    const capDataset = this.props.showCapLine ? [{ type: 'line', label: 'Cap (' + s.cap + ' h)', data: new Array(n).fill(s.cap), borderColor: this.state.theme === 'dark' ? '#647a97' : '#8493a8', borderWidth: 1.5, borderDash: [3, 4], pointRadius: 0, pointHoverRadius: 0, fill: false, order: 1 }] : [];
+    const band = {
+      id: 'todayBand',
+      beforeDatasetsDraw: (chart, a, opts) => {
+        const idx = opts.index; if (idx == null || idx < 0) return;
+        const x = chart.scales.x, y = chart.scales.y, ctx = chart.ctx;
+        const half = Math.abs((x.getPixelForValue(1) - x.getPixelForValue(0)) / 2) || 6;
+        const cx = x.getPixelForValue(idx);
+        ctx.save(); ctx.fillStyle = opts.color; ctx.fillRect(cx - half, y.top, half * 2, y.bottom - y.top); ctx.restore();
+      }
+    };
+    try {
+    this._chart = new Chart(canvas, {
+      plugins: [band],
+      data: {
+        labels: s.labels,
+        datasets: [
+          { type: 'line', label: 'PTO Balance', data: s.balance, borderColor: c.balance, backgroundColor: c.balance, borderWidth: 2.5, pointRadius: n > 45 ? 0 : 2.5, pointHoverRadius: 5, tension: 0.18, order: 0 },
+          { type: 'bar', label: 'PTO Used', data: s.ptoUsed, backgroundColor: c.pto, borderRadius: 4, borderSkipped: false, order: 2, barPercentage: 0.9, categoryPercentage: 0.8 },
+          { type: 'bar', label: 'PH Used', data: s.phUsed, backgroundColor: c.ph, borderRadius: 4, borderSkipped: false, order: 3, barPercentage: 0.9, categoryPercentage: 0.8 },
+          { type: 'line', label: 'Max Accrued', data: maxLine, borderColor: c.max, borderWidth: 2, borderDash: [8, 6], pointRadius: 0, pointHoverRadius: 0, fill: false, order: 1 },
+          ...capDataset,
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        animation: { duration: 450 },
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          x: { grid: { color: c.grid, drawTicks: false }, ticks: { color: c.axis, maxRotation: 90, autoSkip: true, maxTicksLimit: 16, font: { family: 'Space Grotesk', size: 10 } } },
+          y: { beginAtZero: true, grid: { color: c.grid }, ticks: { color: c.axis, font: { family: 'Space Grotesk', size: 11 } }, title: { display: true, text: 'Hours', color: c.ink, font: { family: 'Figtree', size: 12 } } },
+        },
+        plugins: {
+          legend: { labels: { color: c.ink, usePointStyle: true, pointStyle: 'circle', boxWidth: 8, font: { family: 'Figtree', size: 12 } } },
+          tooltip: { mode: 'index', intersect: false, backgroundColor: this.state.theme === 'dark' ? '#0c1728' : '#0d1b2e', titleFont: { family: 'Space Grotesk' }, bodyFont: { family: 'Figtree' }, padding: 10, cornerRadius: 8 },
+          todayBand: { index: s.todayIndex, color: c.band },
+        }
+      }
+    });
+    } catch (err) { this._chart = null; return; }
+    const ch = this._chart;
+    if (typeof requestAnimationFrame !== 'undefined') {
+      requestAnimationFrame(() => { try { ch.resize(); ch.update(); } catch (e) {} });
+    }
+  }
+
+  _accrualData() {
+    return [
+      { i: 84, s: '2/16', e: '3/1', p: '3/6/26', pto: 8, ph: 0, bal: 115.08, st: 'past' },
+      { i: 85, s: '3/2', e: '3/15', p: '3/20/26', pto: 16, ph: 16, bal: 105.85, st: 'past' },
+      { i: 86, s: '3/16', e: '3/29', p: '4/3/26', pto: 8, ph: 0, bal: 104.62, st: 'past' },
+      { i: 87, s: '3/30', e: '4/12', p: '4/17/26', pto: 0, ph: 0, bal: 111.38, st: 'past' },
+      { i: 88, s: '4/13', e: '4/26', p: '5/1/26', pto: 0, ph: 0, bal: 118.15, st: 'past' },
+      { i: 89, s: '4/27', e: '5/10', p: '5/15/26', pto: 0, ph: 0, bal: 124.92, st: 'past' },
+      { i: 90, s: '5/11', e: '5/24', p: '5/29/26', pto: 8, ph: 0, bal: 123.69, st: 'past' },
+      { i: 91, s: '5/25', e: '6/7', p: '6/12/26', pto: 0, ph: 0, bal: 130.46, st: 'past' },
+      { i: 92, s: '6/8', e: '6/21', p: '6/26/26', pto: 0, ph: 0, bal: 137.23, st: 'past' },
+      { i: 93, s: '6/22', e: '7/5', p: '7/10/26', pto: 16, ph: 0, bal: 128.00, st: 'past' },
+      { i: 94, s: '7/6', e: '7/19', p: '7/24/26', pto: 0, ph: 0, bal: 134.77, st: 'current' },
+      { i: 95, s: '7/20', e: '8/2', p: '8/7/26', pto: 8, ph: 0, bal: 133.54, st: 'future' },
+      { i: 96, s: '8/3', e: '8/16', p: '8/21/26', pto: 80, ph: 0, bal: 60.31, st: 'future' },
+      { i: 97, s: '8/17', e: '8/30', p: '9/4/26', pto: 16, ph: 0, bal: 51.08, st: 'future' },
+      { i: 98, s: '8/31', e: '9/13', p: '9/18/26', pto: 0, ph: 0, bal: 57.85, st: 'future' },
+      { i: 99, s: '9/14', e: '9/27', p: '10/2/26', pto: 0, ph: 0, bal: 64.62, st: 'future' },
+      { i: 100, s: '9/28', e: '10/11', p: '10/16/26', pto: 0, ph: 0, bal: 71.38, st: 'future' },
+      { i: 101, s: '10/12', e: '10/25', p: '10/30/26', pto: 0, ph: 0, bal: 78.15, st: 'future' },
+      { i: 102, s: '10/26', e: '11/8', p: '11/13/26', pto: 0, ph: 0, bal: 84.92, st: 'future' },
+    ];
+  }
+
+  _fmt(n, d) { return Number(n).toFixed(d === undefined ? 2 : d); }
+
+  renderVals() {
+    if (!this._kicked) { this._kicked = true; if (typeof setTimeout !== 'undefined') setTimeout(this._startWatch, 0); }
+    const page = this.state.page;
+    const inputStyle = 'padding:9px 12px; border-radius:10px; border:1px solid var(--border); background:var(--bg-elev); color:var(--text); font-size:13.5px; outline:none; min-width:120px;';
+    const primaryBtn = 'padding:10px 18px; border-radius:11px; border:0; background:var(--primary); color:#fff; font-size:13.5px; font-weight:600; cursor:pointer; box-shadow:var(--shadow-sm); white-space:nowrap;';
+    const secondaryBtn = 'padding:10px 18px; border-radius:11px; border:1px solid var(--border-strong); background:var(--surface-2); color:var(--text); font-size:13.5px; font-weight:600; cursor:pointer; white-space:nowrap;';
+    const ghostBtn = 'padding:6px 12px; border-radius:9px; border:1px solid var(--border); background:transparent; color:var(--text-2); font-size:12.5px; font-weight:600; cursor:pointer;';
+
+    const navItems = [
+      { key: 'dashboard', label: 'Dashboard', dot: 'var(--primary)' },
+      { key: 'accruals', label: 'Accruals', dot: 'var(--teal)' },
+      { key: 'usage', label: 'Usage', dot: 'var(--mint)' },
+      { key: 'projection', label: 'Projection', dot: 'var(--warn)' },
+      { key: 'settings', label: 'Settings', dot: 'var(--text-3)' },
+      { key: 'import', label: 'Import', dot: 'var(--danger)' },
+    ];
+    const nav = navItems.map(it => {
+      const active = page === it.key;
+      return {
+        label: it.label, dot: it.dot, go: this.go(it.key),
+        navStyle: 'display:flex; align-items:center; gap:11px; padding:10px 13px; border-radius:11px; font-size:14px; font-weight:' + (active ? '600' : '500') + '; text-decoration:none; cursor:pointer; color:' + (active ? 'var(--text)' : 'var(--text-2)') + '; background:' + (active ? 'var(--primary-soft)' : 'transparent') + ';',
+        pillStyle: 'display:inline-flex; align-items:center; white-space:nowrap; padding:8px 15px; border-radius:999px; font-size:13.5px; font-weight:600; text-decoration:none; cursor:pointer; color:' + (active ? '#fff' : 'var(--text-2)') + '; background:' + (active ? 'var(--primary)' : 'var(--surface-2)') + '; border:1px solid ' + (active ? 'var(--primary)' : 'var(--border)') + ';',
+      };
+    });
+
+    // dashboard stats
+    const mkCard = (label, value, sub, iconColor, iconBg, opts) => ({
+      label, value, sub, iconColor, iconBg, iconShape: (opts && opts.shape) || '3px',
+      valueColor: (opts && opts.valueColor) || 'var(--text)',
+      cardStyle: 'background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:18px; box-shadow:var(--shadow-sm);',
+    });
+    const stats = [
+      mkCard('Current PTO', '134.77', 'hours · period in progress', 'var(--primary)', 'var(--primary-soft)', { shape: '50%' }),
+      mkCard('PH remaining', '0', 'of 16 h granted · 2026', 'var(--mint)', 'var(--teal-soft)', {}),
+      mkCard('Max balance ever', '137.23', 'peak accrued to date', 'var(--teal)', 'var(--teal-soft)', { shape: '50%' }),
+      mkCard('% of cap', '37%', 'of 360 h cap', 'var(--warn)', 'var(--warn-soft)', {}),
+      mkCard('PTO used YTD', '56', 'hours in 2026', 'var(--danger)', 'var(--danger-soft)', {}),
+      mkCard('Next pay date', '7/24', '+6.77 h accrual', 'var(--primary)', 'var(--primary-soft)', { shape: '50%' }),
+    ];
+    const ranges = ['ytd', '1yr', 'all'].map(r => ({
+      label: r === 'ytd' ? 'YTD' : r === '1yr' ? '1 yr' : 'All',
+      set: this.setRange(r),
+      btnStyle: 'padding:6px 14px; border-radius:8px; border:0; cursor:pointer; font-size:12.5px; font-weight:600; font-family:Figtree; background:' + (this.state.chartRange === r ? 'var(--bg-elev)' : 'transparent') + '; color:' + (this.state.chartRange === r ? 'var(--primary)' : 'var(--text-2)') + '; box-shadow:' + (this.state.chartRange === r ? 'var(--shadow-sm)' : 'none') + ';',
+    }));
+
+    // accruals table
+    const stMeta = {
+      past: { color: 'var(--text-2)', bg: 'var(--surface-2)', label: 'Past' },
+      current: { color: 'var(--primary)', bg: 'var(--primary-soft)', label: 'Current' },
+      future: { color: 'var(--teal)', bg: 'var(--teal-soft)', label: 'Upcoming' },
+    };
+    const accruals = this._accrualData().map(a => {
+      const m = stMeta[a.st];
+      const cur = a.st === 'current', fut = a.st === 'future';
+      const rowStyle = 'display:grid; grid-template-columns:var(--acc-cols); align-items:center; gap:6px; padding:var(--row-pad); margin-bottom:var(--row-mb); border-radius:var(--row-radius); border:var(--row-border); box-shadow:var(--row-shadow); border-bottom:1px solid var(--border); background:' + (cur ? 'var(--current)' : 'var(--row-bg)') + '; border-left:' + (cur ? '3px solid var(--current-bar)' : '0') + '; opacity:' + (fut ? '0.72' : '1') + ';';
+      return {
+        index: a.i, period: a.s + ' – ' + a.e, pay: a.p, rate: '6.77',
+        pto: a.pto ? this._fmt(a.pto, 0) : '·', ph: a.ph ? this._fmt(a.ph, 0) : '·',
+        balance: this._fmt(a.bal), rowStyle,
+        textColor: cur ? 'var(--text)' : 'var(--text)',
+        ptoColor: a.pto ? 'var(--danger)' : 'var(--text-3)',
+        phColor: a.ph ? 'var(--warn)' : 'var(--text-3)',
+        balColor: cur ? 'var(--primary)' : 'var(--text)',
+        badge: m.label,
+        badgeStyle: 'display:inline-flex; align-items:center; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:600; color:' + m.color + '; background:' + m.bg + ';',
+      };
+    });
+    const accLegend = [
+      { color: 'var(--text-3)', label: 'Past' },
+      { color: 'var(--primary)', label: 'Current' },
+      { color: 'var(--teal)', label: 'Upcoming' },
+    ];
+
+    // usage
+    const usageRows = this.state.usage.map(u => {
+      const isPh = u.type === 'personal_holiday';
+      const rowStyle = 'display:grid; grid-template-columns:var(--use-cols); align-items:center; gap:6px; padding:var(--row-pad); margin-bottom:var(--row-mb); border-radius:var(--row-radius); border:var(--row-border); box-shadow:var(--row-shadow); border-bottom:1px solid var(--border); background:var(--row-bg);';
+      return {
+        date: u.date, hours: this._fmt(u.hours, 0), reason: u.reason || '—',
+        typeLabel: isPh ? 'Personal Holiday' : 'PTO', rowStyle,
+        typeStyle: 'display:inline-flex; align-items:center; padding:3px 10px; border-radius:999px; font-size:11.5px; font-weight:600; color:' + (isPh ? 'var(--warn)' : 'var(--danger)') + '; background:' + (isPh ? 'var(--warn-soft)' : 'var(--danger-soft)') + ';',
+        reqLabel: u.requested ? '✓ Yes' : 'No',
+        reqStyle: 'padding:4px 12px; border-radius:999px; border:1px solid ' + (u.requested ? 'var(--mint)' : 'var(--border)') + '; background:' + (u.requested ? 'var(--teal-soft)' : 'transparent') + '; color:' + (u.requested ? 'var(--mint)' : 'var(--text-3)') + '; font-size:12px; font-weight:600; cursor:pointer;',
+        toggle: this.toggleReq(u.id), del: this.delUsage(u.id),
+      };
+    });
+    const usageFilters = [
+      { label: 'Type', options: ['All', 'PTO', 'Personal Holiday'] },
+      { label: 'Year', options: ['All', '2026', '2025', '2024', '2023'] },
+      { label: 'Requested', options: ['Any', 'Yes', 'No'] },
+    ];
+
+    // projection
+    const [py, pm, pd] = (this.state.projDate || '2026-12-31').split('-').map(Number);
+    const target = new Date(py, pm - 1, pd);
+    const todayD = new Date(2026, 6, 8);
+    const isFuture = target > todayD;
+    const projTag = isFuture ? 'FUTURE' : (target < todayD ? 'PAST' : 'TODAY');
+    const periodsBetween = Math.round((target - todayD) / (14 * 86400000));
+    let projBal = 134.77 + periodsBetween * 6.769;
+    let lostCap = 0, lostRoll = 0;
+    if (projBal > 360) { lostCap = projBal - 360; projBal = 360; }
+    if (isFuture && py > 2026 && projBal > 240) { lostRoll = projBal - 240; }
+    projBal = Math.max(0, projBal);
+    const projStats = [
+      { label: 'Projected PTO balance', value: this._fmt(projBal), sub: 'hours · pay period containing date', color: (lostCap || lostRoll) ? 'var(--danger)' : 'var(--primary)' },
+      { label: 'PH remaining ' + py, value: py > 2026 ? '16' : '0', sub: (py > 2026 ? '0' : '16') + ' of 16 h used', color: 'var(--text)' },
+      { label: 'Periods from today', value: (periodsBetween >= 0 ? '+' : '') + periodsBetween, sub: '× 6.77 h accrual each', color: 'var(--teal)' },
+    ];
+    const anyLoss = lostCap > 0 || lostRoll > 0;
+    const projNote = anyLoss
+      ? 'Heads up — about ' + this._fmt(lostCap + lostRoll) + ' h would be forfeited before ' + this.state.projDate + ' (' + (lostCap > 0 ? this._fmt(lostCap) + ' h to the 360 h cap' : '') + (lostCap > 0 && lostRoll > 0 ? ', ' : '') + (lostRoll > 0 ? this._fmt(lostRoll) + ' h to year-end rollover' : '') + ').'
+      : 'No hours forfeited to the cap or year-end rollover in this window.';
+    const projNoteStyle = 'margin-top:16px; padding:12px 14px; border-radius:12px; font-size:13px; line-height:1.5; background:' + (anyLoss ? 'var(--warn-soft)' : 'var(--surface-2)') + '; color:' + (anyLoss ? 'var(--warn)' : 'var(--text-3)') + '; border:1px solid ' + (anyLoss ? 'var(--warn)' : 'var(--border)') + ';';
+    const projTagStyle = 'display:inline-flex; align-items:center; padding:6px 13px; border-radius:999px; font-size:11.5px; font-weight:700; letter-spacing:.05em; color:var(--primary); background:var(--primary-soft);';
+
+    const yearRows = [
+      { year: 2023, accrued: 176, pto: 32, ph: 8, capL: 0, rollL: 0 },
+      { year: 2024, accrued: 176, pto: 88, ph: 16, capL: 0, rollL: 0 },
+      { year: 2025, accrued: 176, pto: 104, ph: 16, capL: 0, rollL: 0 },
+      { year: 2026, accrued: 176, pto: 56, ph: 16, capL: 0, rollL: 0 },
+      { year: 2027, accrued: 216, pto: 0, ph: 0, capL: 0, rollL: 0, proj: true },
+    ];
+    const yearStats = yearRows.map(y => ({
+      year: y.year, accrued: this._fmt(y.accrued), pto: this._fmt(y.pto, 0), ph: this._fmt(y.ph, 0),
+      lostCap: y.capL ? this._fmt(y.capL) : '·', lostRoll: y.rollL ? this._fmt(y.rollL) : '·',
+      capColor: y.capL ? 'var(--danger)' : 'var(--text-3)', rollColor: y.rollL ? 'var(--danger)' : 'var(--text-3)',
+      rowStyle: 'display:grid; grid-template-columns:var(--yr-cols); align-items:center; gap:6px; padding:var(--row-pad); margin-bottom:var(--row-mb); border-radius:var(--row-radius); border:var(--row-border); box-shadow:var(--row-shadow); border-bottom:1px solid var(--border); background:' + (y.year === 2026 ? 'var(--current)' : 'var(--row-bg)') + '; border-left:' + (y.year === 2026 ? '3px solid var(--current-bar)' : '0') + '; opacity:' + (y.proj ? '0.72' : '1') + ';',
+    }));
+
+    // settings
+    const constants = [
+      { label: 'Hire date', value: '2021-01-11', help: 'Anchors every pay period.' },
+      { label: 'Period length (days)', value: '14', help: 'Biweekly accrual cadence.' },
+      { label: 'Pay-date offset (days)', value: '5', help: 'Days after period end.' },
+      { label: 'Periods per year', value: '26', help: 'Divisor for the annual rate.' },
+      { label: 'Hours per day', value: '8', help: 'Used to expand usage ranges.' },
+      { label: 'Balance cap (h)', value: '360', help: 'Hard ceiling on accrual.' },
+      { label: 'Rollover threshold (h)', value: '240', help: 'Year-end forfeiture line.' },
+      { label: 'Annual PH hours', value: '16', help: 'Personal-holiday grant per year.' },
+    ];
+    const holidays = this.state.holidays.map(h => ({ date: h.date, name: h.name, del: this.delHoliday(h.id) }));
+    const rowBase = 'display:grid; grid-template-columns:var(--hol-cols); align-items:center; gap:6px; padding:var(--row-pad); margin-bottom:var(--row-mb); border-radius:var(--row-radius); border:var(--row-border); box-shadow:var(--row-shadow); border-bottom:1px solid var(--border); background:var(--row-bg);';
+    const tiers = this.state.tiers.map(t => ({
+      starts: t.starts, days: this._fmt(t.days, 0), hours: this._fmt(t.hours, 0), label: t.label,
+      badge: t.current ? 'Active' : '', 
+      badgeStyle: t.current ? 'display:inline-flex; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:600; color:var(--primary); background:var(--primary-soft);' : 'display:none;',
+      rowStyle: 'display:grid; grid-template-columns:var(--tier-cols); align-items:center; gap:6px; padding:var(--row-pad); margin-bottom:var(--row-mb); border-radius:var(--row-radius); border:var(--row-border); box-shadow:var(--row-shadow); border-bottom:1px solid var(--border); background:' + (t.current ? 'var(--current)' : 'var(--row-bg)') + '; border-left:' + (t.current ? '3px solid var(--current-bar)' : '0') + ';',
+    }));
+
+    const csvFormat = [
+      { title: 'Columns', body: 'Date, Hours, Type, Reason, Requested (header row required).' },
+      { title: 'Dates', body: 'ISO (2026-07-13) or US (7/13/2026).' },
+      { title: 'Type', body: 'PTO or Personal Holiday (case-insensitive).' },
+      { title: 'Requested', body: 'Yes/No or TRUE/FALSE — whether already entered in the HR system.' },
+      { title: '0-hour rows', body: 'Skipped automatically — the sheet pads ranges with weekend rows.' },
+      { title: 'Modes', body: 'Replace-all is destructive but idempotent; Merge keeps existing rows and skips duplicates.' },
+    ];
+
+    return {
+      theme: this.state.theme,
+      themeLabel: this.state.theme === 'dark' ? 'Deep ocean' : 'Airy light',
+      themeHint: this.state.theme === 'dark' ? '☾ Dark' : '☀ Light',
+      toggleTheme: this.toggleTheme,
+      nav, today: 'Jul 8, 2026',
+      isDashboard: page === 'dashboard', isAccruals: page === 'accruals', isUsage: page === 'usage',
+      isProjection: page === 'projection', isSettings: page === 'settings', isImport: page === 'import',
+      stats, ranges, accruals, accLegend,
+      usageRows, usageFilters, onAddUsage: this.onAddUsage,
+      projDate: this.state.projDate, onProjDate: this.onProjDate, projStats, projTag, projTagStyle, projNote, projNoteStyle, yearStats,
+      constants, holidays, tiers, rowBase, csvFormat,
+      inputStyle, primaryBtn, secondaryBtn, ghostBtn,
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from epoch import __version__
 from epoch.config import Settings, get_settings
 from epoch.db import get_session, init_db
-from epoch.routes import csv_routes, data, health, pages, settings_ui, usage
+from epoch.routes import api, csv_routes, data, health, pages, settings_ui, usage
 from epoch.seed import seed_defaults
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -56,6 +56,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health.router)
     app.include_router(pages.router)
     app.include_router(data.router)
+    app.include_router(api.router)
     app.include_router(usage.router)
     app.include_router(settings_ui.router)
     app.include_router(csv_routes.router)

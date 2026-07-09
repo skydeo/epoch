@@ -24,6 +24,44 @@ from epoch.templating import templates
 router = APIRouter(tags=["csv"])
 
 
+def apply_usage_import(session, rows, mode: str) -> int:
+    """Apply parsed usage ``rows`` in ``replace`` (default) or ``merge`` mode.
+
+    Returns the number of rows actually inserted. ``replace`` wipes the log
+    first; ``merge`` skips duplicates on ``(date, type, hours)``. Shared by the
+    HTMX confirm route and the JSON API.
+    """
+    if mode == "replace":
+        for existing in session.exec(select(UsageEntry)).all():
+            session.delete(existing)
+        session.commit()
+        seen: set[tuple] = set()
+    else:  # merge: skip duplicates on (date, type, hours)
+        seen = {
+            (entry.date, entry.type, entry.hours)
+            for entry in session.exec(select(UsageEntry)).all()
+        }
+
+    imported = 0
+    for parsed in rows:
+        key = (parsed.date, parsed.type, parsed.hours)
+        if key in seen:
+            continue
+        seen.add(key)
+        session.add(
+            UsageEntry(
+                date=parsed.date,
+                hours=parsed.hours,
+                type=parsed.type,
+                reason=parsed.reason,
+                requested=parsed.requested,
+            )
+        )
+        imported += 1
+    session.commit()
+    return imported
+
+
 @router.post("/import/csv")
 async def import_preview(request: Request, file: UploadFile = File(...)) -> Response:
     """Parse an uploaded CSV and render the import preview partial."""
@@ -52,34 +90,7 @@ async def import_confirm(
     result = parse_usage_csv(csv_text)
 
     with get_session() as session:
-        if mode == "replace":
-            for existing in session.exec(select(UsageEntry)).all():
-                session.delete(existing)
-            session.commit()
-            seen: set[tuple] = set()
-        else:  # merge: skip duplicates on (date, type, hours)
-            seen = {
-                (entry.date, entry.type, entry.hours)
-                for entry in session.exec(select(UsageEntry)).all()
-            }
-
-        imported = 0
-        for parsed in result.rows:
-            key = (parsed.date, parsed.type, parsed.hours)
-            if key in seen:
-                continue
-            seen.add(key)
-            session.add(
-                UsageEntry(
-                    date=parsed.date,
-                    hours=parsed.hours,
-                    type=parsed.type,
-                    reason=parsed.reason,
-                    requested=parsed.requested,
-                )
-            )
-            imported += 1
-        session.commit()
+        imported = apply_usage_import(session, result.rows, mode)
 
     return templates.TemplateResponse(
         request,

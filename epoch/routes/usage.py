@@ -42,6 +42,55 @@ def _parse_date(value: str, field: str) -> date:
         ) from exc
 
 
+def create_range_entries(
+    session,
+    start_date: date,
+    end_date: date,
+    usage_type: UsageType,
+    reason: str | None,
+    requested: bool,
+) -> list[UsageEntry]:
+    """Expand a range into per-day usage rows at ``hours_per_day`` each.
+
+    Raises a 400 ``HTTPException`` if the range starts before the hire date or
+    expands to zero working days (weekend/holiday-only). Shared by the HTMX
+    form route and the JSON API.
+    """
+    cfg = load_engine_config(session)
+    if start_date < cfg.hire_date:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"start date {start_date.isoformat()} precedes hire date "
+                f"{cfg.hire_date.isoformat()}"
+            ),
+        )
+    holidays = {h.date for h in session.exec(select(CompanyHoliday)).all()}
+    days = expand_range(start_date, end_date, holidays)
+    if not days:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="range contains no working days (weekends/holidays only)",
+        )
+
+    cleaned_reason = (reason or "").strip() or None
+    created: list[UsageEntry] = []
+    for day in days:
+        entry = UsageEntry(
+            date=day,
+            hours=cfg.hours_per_day,
+            type=usage_type,
+            reason=cleaned_reason,
+            requested=requested,
+        )
+        session.add(entry)
+        created.append(entry)
+    session.commit()
+    for entry in created:
+        session.refresh(entry)
+    return created
+
+
 @router.post("/usage")
 async def create_usage(
     request: Request,
@@ -60,40 +109,9 @@ async def create_usage(
     end_date = _parse_date(end, "end")
 
     with get_session() as session:
-        cfg = load_engine_config(session)
-        if start_date < cfg.hire_date:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    f"start date {start_date.isoformat()} precedes hire date "
-                    f"{cfg.hire_date.isoformat()}"
-                ),
-            )
-        holidays = {h.date for h in session.exec(select(CompanyHoliday)).all()}
-        days = expand_range(start_date, end_date, holidays)
-        if not days:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="range contains no working days (weekends/holidays only)",
-            )
-
-        usage_type = _usage_type(type)
-        cleaned_reason = (reason or "").strip() or None
-        created: list[UsageEntry] = []
-        for day in days:
-            entry = UsageEntry(
-                date=day,
-                hours=cfg.hours_per_day,
-                type=usage_type,
-                reason=cleaned_reason,
-                requested=requested,
-            )
-            session.add(entry)
-            created.append(entry)
-        session.commit()
-        for entry in created:
-            session.refresh(entry)
-
+        created = create_range_entries(
+            session, start_date, end_date, _usage_type(type), reason, requested
+        )
         return templates.TemplateResponse(
             request,
             "_usage_rows.html",
