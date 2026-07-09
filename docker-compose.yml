@@ -1,0 +1,26 @@
+services:
+  epoch:
+    build: .
+    restart: unless-stopped
+    ports:
+      # host:container. The app inside the container ALWAYS listens on 8000;
+      # only the left (host) port is yours to choose. Override with EPOCH_PORT.
+      # Bound to 127.0.0.1 so nothing reaches it directly — only `tailscale
+      # serve` (running on this same host) fronts it with HTTPS on the tailnet.
+      - "127.0.0.1:${EPOCH_PORT:-8193}:8000"
+    environment:
+      # SQLite db path inside the container — lives on the ./data bind mount.
+      - DB_PATH=/data/epoch.db
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+    volumes:
+      - ./data:/data                     # sqlite db lives here, survives rebuilds — keep it on local disk
+    # Resource limits: a single-user, read-mostly PTO tracker needs almost
+    # nothing — the accrual fold is microseconds of CPU per request.
+    mem_limit: 512m
+    cpus: 1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
