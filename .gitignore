@@ -17,3 +17,11 @@ __pycache__/
 
 # OS cruft
 .DS_Store
+
+# Frontend SPA (web/) build + deps
+web/node_modules/
+web/dist/
+web/*.tsbuildinfo
+
+# Local dev database dir
+.devdata/
