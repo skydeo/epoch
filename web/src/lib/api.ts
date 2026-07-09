@@ -11,6 +11,14 @@ import type {
   AccrualsResponse,
   ChartData,
   DashboardStats,
+  Holiday,
+  ImportPreview,
+  ImportResult,
+  ProjectionResponse,
+  SettingsResponse,
+  SettingsUpdate,
+  StatsResponse,
+  Tier,
   UsageCreate,
   UsageEntry,
   UsagePatch,
@@ -106,6 +114,71 @@ export const api = {
     }),
   deleteUsage: (id: number) =>
     apiFetch<void>(`/api/usage/${id}`, { method: "DELETE" }),
+
+  // --- Projection / stats ---
+  projection: (date?: string) =>
+    apiFetch<ProjectionResponse>(`/api/projection${qs({ date })}`),
+  stats: () => apiFetch<StatsResponse>("/api/stats"),
+
+  // --- Settings ---
+  settings: () => apiFetch<SettingsResponse>("/api/settings"),
+  saveSettings: (constants: SettingsUpdate) =>
+    apiFetch<{ saved: true }>("/api/settings", {
+      method: "PUT",
+      body: JSON.stringify(constants),
+    }),
+  addHoliday: (body: { date: string; name: string }) =>
+    apiFetch<{ holidays: Holiday[] }>("/api/settings/holidays", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  deleteHoliday: (id: number) =>
+    apiFetch<{ holidays: Holiday[] }>(`/api/settings/holidays/${id}`, {
+      method: "DELETE",
+    }),
+  addTier: (body: {
+    starts_on: string;
+    annual_days: number;
+    annual_hours: number;
+    label: string;
+  }) =>
+    apiFetch<{ tiers: Tier[] }>("/api/settings/tiers", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  updateTier: (
+    id: number,
+    body: {
+      starts_on: string;
+      annual_days: number;
+      annual_hours: number;
+      label: string;
+    },
+  ) =>
+    apiFetch<{ tiers: Tier[] }>(`/api/settings/tiers/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  deleteTier: (id: number) =>
+    apiFetch<{ tiers: Tier[] }>(`/api/settings/tiers/${id}`, {
+      method: "DELETE",
+    }),
+
+  // --- Import / export ---
+  importPreview: (file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return apiFetch<ImportPreview>("/api/import/preview", {
+      method: "POST",
+      body: fd,
+    });
+  },
+  importConfirm: (body: { csv_text: string; mode: "replace" | "merge" }) =>
+    apiFetch<ImportResult>("/api/import/confirm", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  exportUrl: "/export/csv",
 };
 
 // Query-key registry. Use the factory functions so keys stay structurally

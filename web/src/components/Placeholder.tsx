@@ -1,7 +1,9 @@
+import { Link } from "react-router-dom";
+
 import { PageHeader } from "./PageHeader";
 
-// Stand-in for the five sections built in later phases. Keeps routing complete
-// so nav active-states and deep links all work today.
+// Generic fallback surface. All six sections are now real; this only backs the
+// catch-all (404) route.
 export function Placeholder({ title, blurb }: { title: string; blurb: string }) {
   return (
     <section className="animate-epfade">
@@ -11,11 +13,14 @@ export function Placeholder({ title, blurb }: { title: string; blurb: string }) 
           <span className="h-2.5 w-2.5 rounded-full bg-primary" />
         </div>
         <div className="font-display text-base font-semibold">
-          Coming in a later phase
+          Nothing here
         </div>
         <p className="mx-auto mt-1.5 max-w-md text-[13px] text-ink-3">
-          This section is part of the frontend rebuild and lands in a subsequent
-          phase. The dashboard is live now.
+          That page doesn&rsquo;t exist.{" "}
+          <Link to="/" className="font-semibold text-primary">
+            Back to the dashboard
+          </Link>
+          .
         </p>
       </div>
     </section>

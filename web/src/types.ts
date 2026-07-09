@@ -86,3 +86,99 @@ export interface UsagePatch {
   reason?: string | null;
   requested?: boolean;
 }
+
+// --- Projection (GET /api/projection?date=) ---
+
+export interface ProjectionSnap {
+  as_of: string;
+  period: number;
+  pto_balance: number;
+  ph_granted: number;
+  ph_used: number;
+  ph_remaining: number;
+  warnings: string[];
+}
+
+export interface ProjectionResponse {
+  snap: ProjectionSnap;
+  period_start: string;
+  period_end: string;
+  period_pay: string;
+  balance_negative: boolean;
+  warnings: string[];
+  target: string; // ISO date
+  today: string; // ISO date
+  is_future: boolean;
+}
+
+// --- Per-year stats (GET /api/stats) ---
+
+export interface YearStat {
+  year: number;
+  accrued: number;
+  pto_used: number;
+  ph_used: number;
+  lost_to_cap: number;
+  lost_to_rollover: number;
+}
+
+export interface StatsResponse {
+  years: YearStat[];
+}
+
+// --- Settings (GET/PUT /api/settings + holidays/tiers) ---
+
+export type SettingKind = "date" | "int" | "float" | "bool";
+
+export interface SettingField {
+  key: string;
+  kind: SettingKind;
+  label: string;
+  help: string;
+}
+
+export interface Holiday {
+  id: number;
+  date: string;
+  name: string;
+}
+
+export interface Tier {
+  id: number;
+  starts_on: string;
+  annual_days: number;
+  annual_hours: number;
+  label: string;
+}
+
+export interface SettingsResponse {
+  constants: Record<string, string>;
+  fields: SettingField[];
+  holidays: Holiday[];
+  tiers: Tier[];
+}
+
+// PUT /api/settings — full constants object; bool values as real booleans.
+export type SettingsUpdate = Record<string, string | boolean>;
+
+// --- Import (POST /api/import/preview | /confirm) ---
+
+export interface ImportSampleRow {
+  date: string;
+  hours: number;
+  type: UsageTypeValue;
+  reason: string | null;
+  requested: boolean;
+}
+
+export interface ImportPreview {
+  count: number;
+  errors: string[];
+  sample: ImportSampleRow[];
+}
+
+export interface ImportResult {
+  imported: number;
+  skipped: number;
+  mode: string;
+}

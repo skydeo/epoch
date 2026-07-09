@@ -6,6 +6,9 @@ import { Placeholder } from "./components/Placeholder";
 import { Dashboard } from "./pages/Dashboard";
 import { Accruals } from "./pages/Accruals";
 import { Usage } from "./pages/Usage";
+import { Projection } from "./pages/Projection";
+import { Settings } from "./pages/Settings";
+import { Import } from "./pages/Import";
 
 // Scroll to top on every navigation (HANDOFF §7).
 function ScrollToTop() {
@@ -25,33 +28,9 @@ export function App() {
           <Route index element={<Dashboard />} />
           <Route path="accruals" element={<Accruals />} />
           <Route path="usage" element={<Usage />} />
-          <Route
-            path="projection"
-            element={
-              <Placeholder
-                title="Projection"
-                blurb="Pick any date to see the projected PTO balance and any hours forfeited."
-              />
-            }
-          />
-          <Route
-            path="settings"
-            element={
-              <Placeholder
-                title="Settings"
-                blurb="Engine constants, company holidays, and accrual tiers."
-              />
-            }
-          />
-          <Route
-            path="import"
-            element={
-              <Placeholder
-                title="Import / Export"
-                blurb="Load the usage log from a CSV export of the sheet, or back it up."
-              />
-            }
-          />
+          <Route path="projection" element={<Projection />} />
+          <Route path="settings" element={<Settings />} />
+          <Route path="import" element={<Import />} />
           <Route
             path="*"
             element={<Placeholder title="Not found" blurb="No such page." />}
