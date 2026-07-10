@@ -4,6 +4,7 @@ __pycache__/
 *.egg-info/
 .env
 data/
+.devdata/
 *.db
 *.db-wal
 *.db-shm
@@ -11,3 +12,9 @@ data/
 .DS_Store
 tests/
 *.png
+handoff/
+# web/ itself must ship in the build context (the node stage builds it),
+# but not its installed deps or a stale local build output.
+web/node_modules/
+web/dist/
+web/*.tsbuildinfo
