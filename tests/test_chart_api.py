@@ -1,9 +1,8 @@
-"""Dashboard JSON endpoints + page smoke tests.
+"""Dashboard chart/stats JSON endpoints.
 
 The chart/stats math is the engine's (covered exhaustively in ``test_engine``);
-here we assert the *API contract* the frontend depends on — array shapes, range
-windowing, ``today_index`` placement — and that every page renders its key
-element.
+here we assert the *API contract* the SPA chart depends on — array shapes,
+range windowing, ``today_index`` placement.
 """
 
 from __future__ import annotations
@@ -21,6 +20,7 @@ CHART_KEYS = {
     "max_accrued",
     "cap",
     "today_index",
+    "years",
 }
 
 
@@ -58,6 +58,20 @@ def test_chart_shape(client):
     assert data["max_accrued"] > 0
 
 
+def test_chart_max_accrued_matches_dashboard(client):
+    """max_accrued is the peak balance ever reached (through the current
+    period), identical to the dashboard's max_balance stat — never inflated
+    by future projected periods."""
+    _seed_usage(client)
+    chart = client.get("/api/chart").json()
+    dashboard = client.get("/api/dashboard").json()
+
+    assert chart["max_accrued"] == dashboard["max_balance"]
+    # Projected future balances never drag the reference line above the peak
+    # actually reached (they can only match it, e.g. when capped).
+    assert max(chart["balance"]) >= chart["max_accrued"]
+
+
 def test_chart_today_index(client):
     """today_index points at the period whose [start, start+13] contains today."""
     data = client.get("/api/chart").json()
@@ -66,6 +80,15 @@ def test_chart_today_index(client):
     start = date.fromisoformat(data["labels"][idx])
     today = date.today()
     assert start <= today <= start + timedelta(days=13)
+
+
+def test_chart_years(client):
+    """`years` lists calendar years newest-first, from hire year to this year."""
+    data = client.get("/api/chart").json()
+    years = data["years"]
+    assert years, "expected at least one year"
+    assert years == sorted(years, reverse=True)
+    assert date.today().year in years
 
 
 def test_chart_range_filtering(client):
@@ -119,61 +142,3 @@ def test_stats_shape(client):
     by_year = {r["year"]: r for r in data["years"]}
     assert by_year[2026]["pto_used"] >= 8
     assert by_year[2026]["ph_used"] >= 8
-
-
-# --------------------------------------------------------------------------- #
-# Pages — 200 + key element present
-# --------------------------------------------------------------------------- #
-
-
-def test_dashboard_page(client):
-    resp = client.get("/")
-    assert resp.status_code == 200
-    assert 'id="pto-chart"' in resp.text  # the chart canvas
-    assert "Current PTO" in resp.text  # a stat card
-
-
-def test_accruals_page(client):
-    resp = client.get("/accruals")
-    assert resp.status_code == 200
-    assert "ledger-table" in resp.text  # the period table
-    assert "period-current" in resp.text  # current period is highlighted
-
-
-def test_accruals_year_filter(client):
-    resp = client.get("/accruals", params={"year": 2026})
-    assert resp.status_code == 200
-    assert "2026-" in resp.text
-    assert "2024-" not in resp.text
-
-
-def test_usage_page(client):
-    resp = client.get("/usage")
-    assert resp.status_code == 200
-    assert 'hx-post="/usage"' in resp.text  # the new-entry range form
-
-
-def test_projection_page(client):
-    resp = client.get("/projection")
-    assert resp.status_code == 200
-    assert 'hx-get="/projection/result"' in resp.text  # the date picker form
-    assert "Projected PTO balance" in resp.text  # initial (today) snapshot
-    assert "Per-year stats" in resp.text  # the yearly_stats table
-    assert "Lost to rollover" in resp.text
-
-
-def test_settings_page(client):
-    resp = client.get("/settings")
-    assert resp.status_code == 200
-    assert 'name="max_balance_hours"' in resp.text  # a constants field
-    assert 'hx-post="/settings/holidays"' in resp.text  # holiday add form
-    assert 'hx-post="/settings/tiers"' in resp.text  # tier add form
-    assert "22 days/yr (hire)" in resp.text  # seeded tier rendered
-
-
-def test_import_page(client):
-    resp = client.get("/import")
-    assert resp.status_code == 200
-    assert 'hx-post="/import/csv"' in resp.text  # the upload form
-    assert 'href="/export/csv"' in resp.text  # the export link
-    assert "0-hour rows are skipped" in resp.text  # format docs

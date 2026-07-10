@@ -1,0 +1,209 @@
+/* ---------------------------------------------------------------------------
+   epoch SPA global stylesheet.
+
+   Load order matters:
+   1. Self-hosted fonts (bundled via @fontsource — NO Google Fonts CDN; this app
+      runs on a private tailnet, HANDOFF §1/§3).
+   2. design-tokens.css — the verbatim token source. Light is :root default,
+      [data-theme="dark"] flips the whole app.
+   3. Tailwind, with @theme inline mapping the CSS custom properties onto
+      Tailwind's utility namespaces so `bg-surface`, `text-ink-2`, `rounded-card`
+      etc. all resolve to var(--…) and flip with the theme automatically.
+      Components must reference these utilities (or var(--token)) — never hex.
+--------------------------------------------------------------------------- */
+
+/* Space Grotesk — display, all numerals, dates */
+@import "@fontsource/space-grotesk/400.css";
+@import "@fontsource/space-grotesk/500.css";
+@import "@fontsource/space-grotesk/600.css";
+@import "@fontsource/space-grotesk/700.css";
+/* Figtree — body, labels, buttons */
+@import "@fontsource/figtree/400.css";
+@import "@fontsource/figtree/500.css";
+@import "@fontsource/figtree/600.css";
+@import "@fontsource/figtree/700.css";
+
+@import "./design-tokens.css";
+
+@import "tailwindcss";
+
+/* Dark-mode variant is driven by data-theme on <html>, not the `.dark` class. */
+@custom-variant dark (&:where([data-theme="dark"] *));
+
+@theme inline {
+  /* Surfaces */
+  --color-bg: var(--bg);
+  --color-bg-elev: var(--bg-elev);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+
+  /* Lines (named `line` so `border-line` does not collide with the
+     border-width `border` utility) */
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+
+  /* Text / ink */
+  --color-ink: var(--text);
+  --color-ink-2: var(--text-2);
+  --color-ink-3: var(--text-3);
+
+  /* Brand + accents */
+  --color-primary: var(--primary);
+  --color-primary-strong: var(--primary-strong);
+  --color-primary-soft: var(--primary-soft);
+  --color-teal: var(--teal);
+  --color-teal-soft: var(--teal-soft);
+  --color-mint: var(--mint);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-current: var(--current);
+  --color-current-bar: var(--current-bar);
+
+  /* Radii */
+  --radius-card: 18px;
+  --radius-tile: 16px;
+  --radius-field: 10px;
+  --radius-pill: 999px;
+
+  /* Fonts */
+  --font-display: "Space Grotesk", system-ui, sans-serif;
+  --font-body: "Figtree", system-ui, sans-serif;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Tabular numerals everywhere numbers align — most of what makes the tables
+   and stat values feel precise (HANDOFF §11). */
+.tnum,
+.font-display {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Themed scrollbars + native date-picker glyph, mirroring the prototype. */
+::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 8px;
+}
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+}
+[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(1.4);
+}
+
+@keyframes epfade {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.animate-epfade {
+  animation: epfade 0.3s ease;
+}
+
+/* Respect reduced-motion preferences. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-epfade {
+    animation: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   DataTable responsive engine (HANDOFF §3 — "the centerpiece").
+
+   Rows are CSS grids driven by custom properties. Desktop (>= 900px) renders a
+   real table: header shown, per-cell mobile labels hidden, numbers right-
+   aligned. Below 900px each row collapses to a card (label–value pairs), the
+   header hides, and the grid folds to one column. This mirrors the prototype's
+   --acc-cols / --thead-display / --lbl / --jtxt|jnum|jctr switch exactly.
+
+   Components feed the desktop template via inline `--dt-desk-cols`; the mobile
+   override lives in the media query below (in-stylesheet so it beats the inline
+   var without needing !important).
+--------------------------------------------------------------------------- */
+.dt {
+  --dt-thead: grid;
+  --dt-lbl: none;
+  --dt-jtxt: flex-start;
+  --dt-jnum: flex-end;
+  --dt-jctr: center;
+  --dt-row-mb: 0px;
+  --dt-row-pad: 9px 14px;
+  --dt-row-border: 0;
+  --dt-row-radius: 0;
+  --dt-row-bg: transparent;
+  --dt-row-shadow: none;
+}
+.dt-head {
+  display: var(--dt-thead);
+  grid-template-columns: var(--dt-desk-cols);
+  gap: 6px; /* keep header columns aligned with .dt-row cells */
+}
+/* Fixed min-width forces horizontal scroll on narrow *desktop* so wide tables
+   don't clip (HANDOFF §11). It must NOT apply once rows collapse to cards,
+   otherwise the 1fr cards stretch past the viewport (values scroll off-screen).
+   The prototype leaves min-width auto below 900px — mirror that here. */
+@media (min-width: 900px) {
+  .dt-body {
+    min-width: var(--dt-min, auto);
+  }
+}
+.dt-row {
+  display: grid;
+  grid-template-columns: var(--dt-desk-cols);
+  align-items: center;
+  gap: 6px;
+  padding: var(--dt-row-pad);
+  margin-bottom: var(--dt-row-mb);
+  border-radius: var(--dt-row-radius);
+  border: var(--dt-row-border);
+  box-shadow: var(--dt-row-shadow);
+  border-bottom: 1px solid var(--border);
+  background: var(--dt-row-bg);
+}
+.dt-row:last-child {
+  border-bottom: var(--dt-row-border);
+}
+
+@media (max-width: 899.98px) {
+  .dt {
+    --dt-thead: none;
+    --dt-lbl: block;
+    --dt-jtxt: space-between;
+    --dt-jnum: space-between;
+    --dt-jctr: space-between;
+    --dt-row-mb: 10px;
+    --dt-row-pad: 12px 14px;
+    --dt-row-border: 1px solid var(--border);
+    --dt-row-radius: 14px;
+    --dt-row-bg: var(--surface);
+    --dt-row-shadow: var(--shadow-sm);
+  }
+  .dt-head,
+  .dt-row {
+    grid-template-columns: 1fr;
+  }
+}

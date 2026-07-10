@@ -1,0 +1,91 @@
+/* ============================================================================
+   epoch — design tokens
+   Extracted verbatim from the design mockup (Epoch.dc.html).
+   Theme via [data-theme="dark"] on a wrapping element (or <html>).
+   Light is the :root default. Fonts: Space Grotesk (display + all numerals),
+   Figtree (body/UI). Load both from Google Fonts.
+   ========================================================================== */
+
+:root {
+  /* Surfaces */
+  --bg:            #eef3fa;  /* app background (airy cool white) */
+  --bg-elev:       #ffffff;  /* sidebar / top bar */
+  --surface:       #ffffff;  /* cards, tables */
+  --surface-2:     #f3f7fc;  /* insets, table headers, segmented control track */
+
+  /* Lines */
+  --border:        #dde5f0;
+  --border-strong: #c4d1e3;
+
+  /* Text */
+  --text:          #0d1b2e;  /* primary */
+  --text-2:        #54637a;  /* secondary */
+  --text-3:        #8493a8;  /* muted / labels */
+
+  /* Brand + accents (all cool except the two warm "spend" tones) */
+  --primary:        #1e50e6; /* cobalt — primary actions, balance line, current */
+  --primary-strong: #1740c4;
+  --primary-soft:   #e7ecff; /* tint bg for primary chips */
+  --teal:           #0a9d92; /* upcoming / peak */
+  --teal-soft:      #d7f3ef;
+  --mint:           #0f9d63; /* positive / confirmed */
+  --danger:         #e5484d;
+  --danger-soft:    #fdecec;
+  --warn:           #b26a00; /* forfeiture / PH accent */
+  --warn-soft:      #fff2e0;
+
+  /* Current-period highlight */
+  --current:        #dde7ff;
+  --current-bar:    #1e50e6;
+
+  /* Elevation */
+  --shadow-sm: 0 1px 2px rgba(13,27,46,.05);
+  --shadow:    0 1px 2px rgba(13,27,46,.05), 0 10px 26px -14px rgba(13,27,46,.18);
+
+  /* Radii used in the mockup */
+  --r-card: 18px;   /* table/panel cards */
+  --r-tile: 16px;   /* stat cards */
+  --r-field: 10px;  /* inputs */
+  --r-pill: 999px;  /* badges */
+}
+
+[data-theme="dark"] {
+  /* Deep-ocean */
+  --bg:            #070f1c;
+  --bg-elev:       #0c1728;
+  --surface:       #0f1e35;
+  --surface-2:     #122540;
+
+  --border:        #1c3252;
+  --border-strong: #294669;
+
+  --text:          #e9f1fc;
+  --text-2:        #93a6c0;
+  --text-3:        #63799a;
+
+  --primary:        #5088ff;
+  --primary-strong: #79a3ff;
+  --primary-soft:   #12294f;
+  --teal:           #2bd3c5;
+  --teal-soft:      #0d2d33;
+  --mint:           #43e3a8;
+  --danger:         #ff6b6b;
+  --danger-soft:    #3a1a1e;
+  --warn:           #ffb74d;
+  --warn-soft:      #33260f;
+
+  --current:        #14315e;
+  --current-bar:    #5088ff;
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.3);
+  --shadow:    0 1px 2px rgba(0,0,0,.3), 0 14px 34px -16px rgba(0,0,0,.7);
+}
+
+/* ---- Chart.js palette (see handoff.md §5). Not CSS vars because Chart.js
+   needs literal colors; kept here for reference. --------------------------- */
+/*
+  LIGHT: balance #1e50e6  peak #0a9d92  ptoUsed #e26a3c  phUsed #d99311
+         band rgba(30,80,230,.12)  grid #e6edf6  axis #8493a8  ink #54637a
+  DARK:  balance #5088ff  peak #2bd3c5  ptoUsed #ff8a5c  phUsed #ffc94d
+         band rgba(80,136,255,.22)  grid #1c3252  axis #63799a  ink #93a6c0
+*/

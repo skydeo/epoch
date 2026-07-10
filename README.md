@@ -5,10 +5,12 @@ spreadsheet. It recomputes your paid-time-off balance from first principles on
 every request: pay periods are pure 14-day arithmetic anchored at your hire
 date, each period accrues at your current tenure tier, and a deterministic fold
 over your usage log reproduces the running balance (with the annual rollover
-forfeiture and the hard balance cap applied in order). Server-rendered FastAPI +
-Jinja2 + HTMX with a Chart.js dashboard, SQLite for storage, one Docker
-container bound to `127.0.0.1` and fronted by `tailscale serve` — no auth, no
-accounts, tailnet-only by design.
+forfeiture and the hard balance cap applied in order). A React + Vite +
+TypeScript single-page app (client-side routing, optimistic updates via
+TanStack Query, a Chart.js dashboard, and a persisted light/dark theme toggle)
+talks to a FastAPI JSON API; the built SPA is served from the same FastAPI
+process. SQLite for storage, one Docker container bound to `127.0.0.1` and
+fronted by `tailscale serve` — no auth, no accounts, tailnet-only by design.
 
 For the full design rationale and the phase-by-phase build plan, see
 [`IMPLEMENTATION.md`](./IMPLEMENTATION.md). This README is the practical "how do
@@ -16,20 +18,38 @@ I run and use this" reference.
 
 ## Local development
 
+Backend (FastAPI JSON API):
+
 ```bash
 uv sync                                    # install deps (including dev/test)
 uv run pytest                              # run the test suite
-uv run uvicorn epoch.main:app --reload     # run with auto-reload
-```
-
-Without an explicit `DB_PATH`, the app defaults to `/data/epoch.db`; for local
-runs point it somewhere writable first:
-
-```bash
-export DB_PATH=./data/epoch.db
+export DB_PATH=./data/epoch.db             # default is /data/epoch.db — point it somewhere writable
 mkdir -p data
 uv run uvicorn epoch.main:app --reload     # http://127.0.0.1:8000
 ```
+
+Frontend (React + Vite SPA in `web/`):
+
+```bash
+cd web
+npm install
+npm run dev                                # http://localhost:5173
+```
+
+The Vite dev server proxies `/api` and `/export` to the FastAPI instance on
+`127.0.0.1:8000` (see `web/vite.config.ts`), so run both processes for
+full-stack dev with hot reload.
+
+For a production-style single-process run, build the SPA once — FastAPI serves
+`web/dist` itself (deep links like `/usage` fall back to `index.html`):
+
+```bash
+cd web && npm run build && cd ..
+uv run uvicorn epoch.main:app              # SPA + API on http://127.0.0.1:8000
+```
+
+If `web/dist` is missing the backend still starts (API only) and logs a
+warning — pytest never needs a frontend build.
 
 The database is created and seeded (settings, accrual tiers, a starter US
 company-holiday list) automatically on first startup. `GET /healthz` returns
@@ -43,6 +63,10 @@ docker compose up -d --build
 curl http://127.0.0.1:8193/healthz     # smoke-test on the host itself
 # {"status":"ok","version":"0.1.0"}
 ```
+
+The image is a multi-stage build: a Node stage compiles the SPA
+(`npm ci && npm run build` in `web/`), then the Python stage copies `web/dist`
+into the final image — no Node at runtime.
 
 The container publishes to **`127.0.0.1:8193`** by default — host loopback only.
 (The app always listens on **8000** *inside* the container; `8193` is just the
@@ -106,10 +130,18 @@ Edits are preserved across restarts (seeding is insert-if-missing).
 
 ## Pages
 
+The UI is a single-page app (client-side routing — no full-page reloads; every
+mutation updates in place). A theme toggle in the sidebar persists light/dark
+to `localStorage` and applies before first paint, so there is no flash on
+reload.
+
 - **`/`** — dashboard: stat cards (current balance, PH remaining, max ever, % of
-  cap, YTD used, next pay date + accrual) and the balance chart.
-- **`/accruals`** — the per-period ledger table.
-- **`/usage`** — the usage log with a range-entry form and inline edit/delete.
+  cap, YTD used, next pay date + accrual) and the balance chart
+  (YTD / 1yr / All ranges, restyled per theme).
+- **`/accruals`** — the per-period ledger table with the current period
+  highlighted.
+- **`/usage`** — the usage log with a range-entry form, filters, and inline
+  edit / requested-toggle / delete.
 - **`/projection`** — balance on a future date, flagging any cap/rollover loss.
 - **`/settings`** — the editable constants above.
-- **`/import`** — CSV upload.
+- **`/import`** — CSV upload (preview → confirm) and export.

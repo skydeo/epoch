@@ -60,28 +60,20 @@ def test_zero_hour_rows_skipped():
 
 
 # --------------------------------------------------------------------------- #
-# Import routes
+# Import (preview → confirm over the JSON API) and export
 # --------------------------------------------------------------------------- #
 
 
 def _import(client, text, mode="replace"):
     preview = client.post(
-        "/import/csv", files={"file": ("usage.csv", text, "text/csv")}
+        "/api/import/preview", files={"file": ("usage.csv", text, "text/csv")}
     )
     assert preview.status_code == 200
     confirm = client.post(
-        "/import/csv/confirm", data={"csv_text": text, "mode": mode}
+        "/api/import/confirm", json={"csv_text": text, "mode": mode}
     )
     assert confirm.status_code == 200
     return confirm
-
-
-def test_import_preview_reports_count(client):
-    resp = client.post(
-        "/import/csv", files={"file": ("usage.csv", SAMPLE_CSV, "text/csv")}
-    )
-    assert resp.status_code == 200
-    assert "3 usage rows parsed" in resp.text
 
 
 def test_replace_mode_idempotent(client):
@@ -94,7 +86,8 @@ def test_replace_mode_idempotent(client):
 def test_merge_skips_duplicates(client):
     _import(client, SAMPLE_CSV, mode="replace")
     assert len(_all_entries()) == 3
-    _import(client, SAMPLE_CSV, mode="merge")  # same rows again
+    resp = _import(client, SAMPLE_CSV, mode="merge")  # same rows again
+    assert resp.json() == {"imported": 0, "skipped": 3, "mode": "merge"}
     assert len(_all_entries()) == 3  # (date, type, hours) dedup
 
 
