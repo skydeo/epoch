@@ -151,6 +151,9 @@ function ChartCanvas({
         pointHoverRadius: 5,
         tension: 0.18,
         order: 0,
+        // Every line gets a unique stack key: the scales are stacked for the
+        // usage bars, and lines sharing a stack would sum their values.
+        stack: "balance",
       },
       {
         type: "bar",
@@ -160,6 +163,9 @@ function ChartCanvas({
         borderRadius: 4,
         borderSkipped: false,
         order: 2,
+        // PTO and PH stack in one column when used in the same period, so
+        // each period keeps the full category width.
+        stack: "used",
         barPercentage: 0.9,
         categoryPercentage: 0.8,
       },
@@ -171,6 +177,7 @@ function ChartCanvas({
         borderRadius: 4,
         borderSkipped: false,
         order: 3,
+        stack: "used",
         barPercentage: 0.9,
         categoryPercentage: 0.8,
       },
@@ -185,6 +192,7 @@ function ChartCanvas({
         pointHoverRadius: 0,
         fill: false,
         order: 1,
+        stack: "peak",
       },
     ];
 
@@ -200,6 +208,7 @@ function ChartCanvas({
         pointHoverRadius: 0,
         fill: false,
         order: 1,
+        stack: "cap",
       });
     }
 
@@ -214,6 +223,7 @@ function ChartCanvas({
         interaction: { mode: "index", intersect: false },
         scales: {
           x: {
+            stacked: true,
             grid: { color: c.grid, drawTicks: false },
             ticks: {
               color: c.axis,
@@ -225,6 +235,7 @@ function ChartCanvas({
           },
           // One shared y-axis (hours), never dual.
           y: {
+            stacked: true,
             beginAtZero: true,
             grid: { color: c.grid },
             ticks: {
