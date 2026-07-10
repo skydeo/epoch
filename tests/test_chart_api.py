@@ -58,6 +58,20 @@ def test_chart_shape(client):
     assert data["max_accrued"] > 0
 
 
+def test_chart_max_accrued_matches_dashboard(client):
+    """max_accrued is the peak balance ever reached (through the current
+    period), identical to the dashboard's max_balance stat — never inflated
+    by future projected periods."""
+    _seed_usage(client)
+    chart = client.get("/api/chart").json()
+    dashboard = client.get("/api/dashboard").json()
+
+    assert chart["max_accrued"] == dashboard["max_balance"]
+    # Projected future balances never drag the reference line above the peak
+    # actually reached (they can only match it, e.g. when capped).
+    assert max(chart["balance"]) >= chart["max_accrued"]
+
+
 def test_chart_today_index(client):
     """today_index points at the period whose [start, start+13] contains today."""
     data = client.get("/api/chart").json()

@@ -261,6 +261,10 @@ function ChartCanvas({
                   const fill = ds.backgroundColor as string | undefined;
                   return {
                     text: String(ds.label ?? ""),
+                    // Custom items bypass the default generateLabels, which is
+                    // what normally copies labels.color — without this the text
+                    // falls back to Chart.js's near-black default in dark mode.
+                    fontColor: c.ink,
                     fillStyle: isLine ? "transparent" : fill,
                     strokeStyle: isLine ? border ?? fill : fill,
                     lineWidth: isLine ? (ds.borderWidth as number) ?? 2 : 0,

@@ -61,9 +61,14 @@ async def chart_data(start: str | None = None, end: str | None = None) -> dict:
         (i for i, r in enumerate(window) if r.index == current_index), -1
     )
 
-    # max_accrued is the peak balance over the *full* history (matches the
-    # sheet's "Max PTO Accrued" horizontal line), not just the visible window.
-    max_accrued = max((r.balance for r in ledger), default=0.0)
+    # max_accrued is the peak balance ever *reached* — periods up to and
+    # including the current one (matches the sheet's "Max PTO Accrued" line and
+    # the dashboard stat). Future projected periods are excluded: with no
+    # planned usage the projection climbs indefinitely and would drag the
+    # reference line far above any real balance.
+    max_accrued = max(
+        (r.balance for r in ledger if r.index <= current_index), default=0.0
+    )
 
     # Calendar years available for the chart's year filter — hire year through
     # the current year, newest first (2026, 2025, …). Independent of the window
