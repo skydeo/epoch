@@ -1,4 +1,4 @@
-"""JSON data endpoints consumed by ``dashboard.js``.
+"""JSON data endpoints consumed by the SPA's dashboard chart and stats tables.
 
 The server does *all* the math here — the client only draws. ``/api/chart``
 returns parallel arrays keyed by pay-period start date (mirroring the source
@@ -16,27 +16,14 @@ from fastapi import APIRouter
 from epoch.db import get_session
 from epoch.domain import load_engine_config, load_usage
 from epoch.engine import (
-    EngineConfig,
     PeriodRow,
     compute_ledger,
     period_index_for,
     yearly_stats,
 )
+from epoch.services import horizon
 
 router = APIRouter(prefix="/api", tags=["data"])
-
-
-def _horizon(cfg: EngineConfig, today: date) -> date:
-    """How far forward the ledger is folded: today + the configured horizon.
-
-    Uses whole-month arithmetic without dateutil (stdlib only).
-    """
-    months = cfg.projection_horizon_months
-    total = (today.year * 12 + (today.month - 1)) + months
-    year, month = divmod(total, 12)
-    # Clamp the day so month-end math never overflows (e.g. horizon into Feb).
-    day = min(today.day, 28)
-    return date(year, month + 1, day)
 
 
 @router.get("/chart")
@@ -54,7 +41,7 @@ async def chart_data(start: str | None = None, end: str | None = None) -> dict:
         cfg = load_engine_config(session)
         usage = load_usage(session)
 
-    through = max(today, _horizon(cfg, today))
+    through = max(today, horizon(cfg, today))
     ledger = compute_ledger(cfg, usage, through)
 
     start_d = date.fromisoformat(start) if start else None
@@ -97,7 +84,7 @@ async def stats_data() -> dict:
         cfg = load_engine_config(session)
         usage = load_usage(session)
 
-    through = max(today, _horizon(cfg, today))
+    through = max(today, horizon(cfg, today))
     years = yearly_stats(cfg, usage, through)
     return {
         "years": [
