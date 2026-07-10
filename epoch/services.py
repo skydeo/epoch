@@ -11,7 +11,7 @@ parameter — the engine itself stays clock-free.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 from fastapi import HTTPException, status
 from sqlmodel import select
@@ -212,6 +212,93 @@ def get_entry(session, entry_id: int) -> UsageEntry:
             detail=f"usage entry {entry_id} not found",
         )
     return entry
+
+
+def usage_entry_json(entry: UsageEntry) -> dict:
+    """The canonical UsageEntry JSON shape consumed by the SPA.
+
+    Kept here (not in the route layer) so ``group_trips`` can serialize the
+    per-day rows it nests inside each trip with exactly the same shape.
+    """
+    return {
+        "id": entry.id,
+        "date": entry.date.isoformat(),
+        "hours": entry.hours,
+        "type": entry.type.value,
+        "reason": entry.reason,
+        "requested": entry.requested,
+    }
+
+
+def get_entries(session, ids: list[int]) -> list[UsageEntry]:
+    """Fetch every id, raising 404 if *any* is missing (bulk-op precondition)."""
+    return [get_entry(session, entry_id) for entry_id in ids]
+
+
+# --------------------------------------------------------------------------- #
+# Usage: trip grouping
+# --------------------------------------------------------------------------- #
+
+
+def _next_working_day(d: date, holidays: set[date]) -> date:
+    """The first working day strictly after ``d`` (skips weekends + holidays)."""
+    nxt = d + timedelta(days=1)
+    while nxt.weekday() >= 5 or nxt in holidays:
+        nxt += timedelta(days=1)
+    return nxt
+
+
+def _trip_dict(entries: list[UsageEntry]) -> dict:
+    """Serialize one run of contiguous same-key entries into a trip dict."""
+    dates = [e.date for e in entries]
+    flags = [e.requested for e in entries]
+    if all(flags):
+        requested = "all"
+    elif not any(flags):
+        requested = "none"
+    else:
+        requested = "some"
+    return {
+        "start": min(dates).isoformat(),
+        "end": max(dates).isoformat(),
+        "days": [usage_entry_json(e) for e in entries],
+        "day_count": len(entries),
+        "total_hours": round(sum(e.hours for e in entries), 2),
+        "type": entries[0].type.value,
+        "reason": (entries[0].reason or "").strip() or None,
+        "requested": requested,
+        "ids": [e.id for e in entries],
+    }
+
+
+def group_trips(rows: list[UsageEntry], holidays: set[date]) -> list[dict]:
+    """Fold per-day usage rows into mentally-adjacent "trips".
+
+    Rows are sorted by date ascending. Two consecutive entries belong to the
+    same trip iff they share a ``type``, share a ``reason`` (compared after
+    ``(reason or "").strip()`` so empty reasons group together), and the later
+    entry falls on-or-before the **next working day** after the earlier one —
+    i.e. only weekends and company holidays may sit between them. Any actual
+    working-day gap, or a differing type/reason, starts a new trip. Multiple
+    entries on the same date with the same key stay in one trip.
+    """
+    ordered = sorted(rows, key=lambda e: (e.date, e.id or 0))
+    trips: list[dict] = []
+    run: list[UsageEntry] = []
+    for entry in ordered:
+        if run:
+            prev = run[-1]
+            same_key = prev.type == entry.type and (prev.reason or "").strip() == (
+                entry.reason or ""
+            ).strip()
+            contiguous = entry.date <= _next_working_day(prev.date, holidays)
+            if not (same_key and contiguous):
+                trips.append(_trip_dict(run))
+                run = []
+        run.append(entry)
+    if run:
+        trips.append(_trip_dict(run))
+    return trips
 
 
 # --------------------------------------------------------------------------- #

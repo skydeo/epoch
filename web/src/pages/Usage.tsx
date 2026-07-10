@@ -3,11 +3,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { PageHeader } from "../components/PageHeader";
 import { DataTable, type Column } from "../components/DataTable";
+import { SegmentedControl } from "../components/SegmentedControl";
 import { Badge, Button, Field, inputCls } from "../components/ui";
 import { EmptyState, ErrorState, Spinner } from "../components/states";
 import { ApiError, api, queryKeys, type UsageFilters } from "../lib/api";
 import { fmtG } from "../lib/format";
-import type { UsageEntry, UsageResponse, UsageTypeValue } from "../types";
+import type { Trip, UsageEntry, UsageResponse, UsageTypeValue } from "../types";
 
 const editInputCls =
   "rounded-field border border-line bg-bg-elev px-2 py-1.5 text-[13px] text-ink " +
@@ -19,6 +20,10 @@ const todayIso = () => new Date().toISOString().slice(0, 10);
 // filter combo). Optimistic mutations update every matching entry at once.
 const USAGE_ROOT = { queryKey: ["usage"] as const };
 
+// A trip's identity across refetches: type + start + reason survive a requested
+// toggle (ids do too, but this reads clearer for the expand set).
+const tripKey = (t: Trip) => `${t.type}|${t.start}|${t.reason ?? ""}`;
+
 interface EditDraft {
   date: string;
   hours: string;
@@ -26,14 +31,20 @@ interface EditDraft {
   reason: string;
 }
 
+const DAY_GRID = "110px 64px 140px minmax(120px,1fr) 96px 150px";
+
 export function Usage() {
   const qc = useQueryClient();
+
+  // Trips | Days — trips is the default mental model (a range is one trip).
+  const [view, setView] = useState<"trips" | "days">("trips");
 
   // --- Filters drive the query params (HANDOFF §7) ---
   const [type, setType] = useState<"" | UsageTypeValue>("");
   const [yearFilter, setYearFilter] = useState<"" | number>("");
   const [requested, setRequested] = useState<"" | "true" | "false">("");
-  // Newest date first by default (current data at the top).
+  // Newest first by default (current data at the top): days by date, trips by
+  // start date.
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   const filters: UsageFilters = useMemo(
@@ -59,6 +70,15 @@ export function Usage() {
     return sortDir === "asc" ? sorted : sorted.reverse();
   }, [query.data, sortDir]);
 
+  // Trips arrive ascending by start; flip for descending.
+  const trips = useMemo(() => {
+    const base = query.data?.trips ?? [];
+    const sorted = [...base].sort(
+      (a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end),
+    );
+    return sortDir === "asc" ? sorted : sorted.reverse();
+  }, [query.data, sortDir]);
+
   // --- Balance-rippling invalidation: a usage change shifts every downstream
   //     balance (dashboard cards, chart, accrual ledger). HANDOFF §7. ---
   const invalidateBalances = () => {
@@ -67,39 +87,47 @@ export function Usage() {
     qc.invalidateQueries({ queryKey: ["accruals"] });
   };
 
+  const snapshot = () => qc.getQueriesData<UsageResponse>(USAGE_ROOT);
+  const restore = (prev: ReturnType<typeof snapshot> | undefined) =>
+    prev?.forEach(([key, data]) => qc.setQueryData(key, data));
+
+  // Update just the flat `rows` of every cached usage response.
   const patchCache = (fn: (rows: UsageEntry[]) => UsageEntry[]) => {
     qc.setQueriesData<UsageResponse>(USAGE_ROOT, (old) =>
       old ? { ...old, rows: fn(old.rows) } : old,
     );
   };
-  const snapshot = () => qc.getQueriesData<UsageResponse>(USAGE_ROOT);
-  const restore = (
-    prev: ReturnType<typeof snapshot> | undefined,
-  ) => prev?.forEach(([key, data]) => qc.setQueryData(key, data));
+  // Update the whole cached usage response (rows AND grouped trips), used by
+  // trip-level bulk mutations so the grouped view stays consistent optimistically.
+  const patchUsage = (fn: (data: UsageResponse) => UsageResponse) => {
+    qc.setQueriesData<UsageResponse>(USAGE_ROOT, (old) => (old ? fn(old) : old));
+  };
 
-  // --- Toggle "requested" (optimistic) ---
+  // --- Toggle "requested" for one day (optimistic) ---
   const toggle = useMutation({
     mutationFn: (v: { id: number; requested: boolean }) =>
       api.patchUsage(v.id, { requested: v.requested }),
     onMutate: async ({ id, requested }) => {
       await qc.cancelQueries(USAGE_ROOT);
       const prev = snapshot();
-      patchCache((rows) =>
-        rows.map((r) => (r.id === id ? { ...r, requested } : r)),
-      );
+      patchUsage((data) => ({
+        ...data,
+        rows: data.rows.map((r) => (r.id === id ? { ...r, requested } : r)),
+        trips: reflagTrips(data.trips, [id], requested),
+      }));
       return { prev };
     },
     onError: (_e, _v, ctx) => restore(ctx?.prev),
     onSettled: () => qc.invalidateQueries(USAGE_ROOT),
   });
 
-  // --- Delete (optimistic) ---
+  // --- Delete one day (optimistic) ---
   const del = useMutation({
     mutationFn: (id: number) => api.deleteUsage(id),
     onMutate: async (id) => {
       await qc.cancelQueries(USAGE_ROOT);
       const prev = snapshot();
-      patchCache((rows) => rows.filter((r) => r.id !== id));
+      patchUsage((data) => removeIds(data, [id]));
       return { prev };
     },
     onError: (_e, _id, ctx) => restore(ctx?.prev),
@@ -109,7 +137,7 @@ export function Usage() {
     },
   });
 
-  // --- Inline edit (optimistic) ---
+  // --- Inline edit one day (optimistic) ---
   const patch = useMutation({
     mutationFn: (v: {
       id: number;
@@ -134,6 +162,43 @@ export function Usage() {
     },
   });
 
+  // --- Toggle "requested" for a whole trip (bulk PATCH, optimistic) ---
+  const bulkToggle = useMutation({
+    mutationFn: (v: { ids: number[]; requested: boolean }) =>
+      api.bulkPatchUsage({ ids: v.ids, requested: v.requested }),
+    onMutate: async ({ ids, requested }) => {
+      await qc.cancelQueries(USAGE_ROOT);
+      const prev = snapshot();
+      const idSet = new Set(ids);
+      patchUsage((data) => ({
+        ...data,
+        rows: data.rows.map((r) =>
+          idSet.has(r.id) ? { ...r, requested } : r,
+        ),
+        trips: reflagTrips(data.trips, ids, requested),
+      }));
+      return { prev };
+    },
+    onError: (_e, _v, ctx) => restore(ctx?.prev),
+    onSettled: () => qc.invalidateQueries(USAGE_ROOT),
+  });
+
+  // --- Delete a whole trip (bulk delete, optimistic) ---
+  const tripDelete = useMutation({
+    mutationFn: (ids: number[]) => api.bulkDeleteUsage(ids),
+    onMutate: async (ids) => {
+      await qc.cancelQueries(USAGE_ROOT);
+      const prev = snapshot();
+      patchUsage((data) => removeIds(data, ids));
+      return { prev };
+    },
+    onError: (_e, _ids, ctx) => restore(ctx?.prev),
+    onSettled: () => {
+      qc.invalidateQueries(USAGE_ROOT);
+      invalidateBalances();
+    },
+  });
+
   // --- Add a range (server expands to per-day rows) ---
   const [form, setForm] = useState({
     start: todayIso(),
@@ -146,12 +211,14 @@ export function Usage() {
     mutationFn: () => api.createUsage(form),
     onSuccess: (data) => {
       // Merge the freshly created rows into every usage cache so the table
-      // updates in place; the settle-invalidate reconciles filters/sort.
+      // updates in place; the settle-invalidate reconciles filters/sort/trips.
       patchCache((rows) =>
         [...rows, ...data.created].sort(
           (a, b) => a.date.localeCompare(b.date) || a.id - b.id,
         ),
       );
+      // A new range is a new trip — land the user where they can see it.
+      setView("trips");
     },
     onSettled: () => {
       qc.invalidateQueries(USAGE_ROOT);
@@ -195,10 +262,20 @@ export function Usage() {
     cancelEdit();
   };
 
-  const addError =
-    add.error instanceof ApiError ? add.error.message : null;
+  // --- Expanded trips ---
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggleExpanded = (key: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
 
-  const columns: Column<UsageEntry>[] = useMemo(
+  const addError = add.error instanceof ApiError ? add.error.message : null;
+
+  // Shared per-day columns — reused by the Days table and each expanded trip.
+  const dayColumns: Column<UsageEntry>[] = useMemo(
     () => [
       {
         key: "date",
@@ -258,16 +335,7 @@ export function Usage() {
                 <option value="personal_holiday">Personal Holiday</option>
               </select>
             );
-          const isPh = r.type === "personal_holiday";
-          return (
-            <Badge
-              color={isPh ? "var(--warn)" : "var(--danger)"}
-              bg={isPh ? "var(--warn-soft)" : "var(--danger-soft)"}
-              className="text-[11.5px]"
-            >
-              {isPh ? "Personal Holiday" : "PTO"}
-            </Badge>
-          );
+          return <TypePill type={r.type} />;
         },
       },
       {
@@ -293,19 +361,12 @@ export function Usage() {
         header: "Requested",
         align: "center",
         render: (r) => (
-          <button
-            type="button"
-            onClick={() => toggle.mutate({ id: r.id, requested: !r.requested })}
-            className="cursor-pointer rounded-pill border px-3 py-1 text-xs font-semibold"
-            style={{
-              borderColor: r.requested ? "var(--mint)" : "var(--border)",
-              background: r.requested ? "var(--teal-soft)" : "transparent",
-              color: r.requested ? "var(--mint)" : "var(--text-3)",
-            }}
-            aria-pressed={r.requested}
-          >
-            {r.requested ? "✓ Yes" : "No"}
-          </button>
+          <RequestedPill
+            requested={r.requested}
+            onClick={() =>
+              toggle.mutate({ id: r.id, requested: !r.requested })
+            }
+          />
         ),
       },
       {
@@ -346,11 +407,123 @@ export function Usage() {
     [editingId, draft],
   );
 
+  // Trip-level columns for the grouped view.
+  const tripColumns: Column<Trip>[] = useMemo(
+    () => [
+      {
+        key: "expand",
+        header: "",
+        label: "",
+        render: (t) => {
+          const open = expanded.has(tripKey(t));
+          return (
+            <button
+              type="button"
+              onClick={() => toggleExpanded(tripKey(t))}
+              aria-expanded={open}
+              aria-label={open ? "Collapse trip" : "Expand trip"}
+              className="flex h-7 w-7 items-center justify-center rounded-field border border-line text-ink-2 hover:border-line-strong hover:text-ink"
+            >
+              <span
+                className="transition-transform"
+                style={{ transform: open ? "rotate(90deg)" : "none" }}
+              >
+                ›
+              </span>
+            </button>
+          );
+        },
+      },
+      {
+        key: "range",
+        header: "Dates",
+        render: (t) => (
+          <span className="font-display font-semibold">
+            {t.start === t.end ? t.start : `${t.start} → ${t.end}`}
+          </span>
+        ),
+      },
+      {
+        key: "size",
+        header: "Days / Hours",
+        align: "right",
+        render: (t) => (
+          <span className="font-display tabular-nums text-ink-2">
+            {t.day_count} {t.day_count === 1 ? "day" : "days"} · {fmtG(t.total_hours)}h
+          </span>
+        ),
+      },
+      {
+        key: "type",
+        header: "Type",
+        render: (t) => <TypePill type={t.type} />,
+      },
+      {
+        key: "reason",
+        header: "Reason",
+        render: (t) => (
+          <span className="truncate text-ink-2">{t.reason || "—"}</span>
+        ),
+      },
+      {
+        key: "requested",
+        header: "Requested",
+        align: "center",
+        render: (t) => <TripRequestedBadge trip={t} />,
+      },
+      {
+        key: "actions",
+        header: "Actions",
+        align: "right",
+        render: (t) => {
+          const allRequested = t.requested === "all";
+          return (
+            <span className="flex gap-2">
+              <Button
+                variant="ghost"
+                onClick={() =>
+                  bulkToggle.mutate({ ids: t.ids, requested: !allRequested })
+                }
+              >
+                {allRequested ? "Unrequest all" : "Request all"}
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  const label =
+                    t.start === t.end ? t.start : `${t.start} → ${t.end}`;
+                  if (
+                    window.confirm(
+                      `Delete this trip (${t.day_count} day${t.day_count === 1 ? "" : "s"}, ${label})?`,
+                    )
+                  )
+                    tripDelete.mutate(t.ids);
+                }}
+              >
+                Delete
+              </Button>
+            </span>
+          );
+        },
+      },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [expanded],
+  );
+
+  // The per-day rows shown inside an expanded trip, sourced from the flat row
+  // list so per-day edits/toggles/deletes stay live without re-grouping.
+  const daysForTrip = (t: Trip) => {
+    const ids = new Set(t.ids);
+    const inTrip = (query.data?.rows ?? []).filter((r) => ids.has(r.id));
+    return inTrip.sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
+  };
+
   return (
     <section className="animate-epfade">
       <PageHeader
         title="Usage"
-        blurb="Log PTO and personal-holiday days. A range expands to one row per working day."
+        blurb="Log PTO and personal-holiday days. Adjacent days with the same reason group into one trip."
       />
 
       {/* ===== Add range ===== */}
@@ -422,8 +595,20 @@ export function Usage() {
         </div>
       )}
 
-      {/* ===== Filters ===== */}
-      <div className="mb-4 flex flex-wrap gap-3">
+      {/* ===== View switch + filters ===== */}
+      <div className="mb-4 flex flex-wrap items-end gap-3">
+        <div className="flex flex-col gap-1.5 text-xs font-semibold text-ink-2">
+          View
+          <SegmentedControl
+            segments={[
+              { value: "trips", label: "Trips" },
+              { value: "days", label: "Days" },
+            ]}
+            value={view}
+            onChange={setView}
+            ariaLabel="Usage view"
+          />
+        </div>
         <Field label="Type">
           <select
             className={inputCls}
@@ -488,21 +673,163 @@ export function Usage() {
           />
         </div>
       )}
+
       {query.data &&
         (query.data.rows.length === 0 ? (
           <div className="rounded-card border border-line bg-surface shadow-[var(--shadow-sm)]">
             <EmptyState message="No usage entries match these filters." />
           </div>
-        ) : (
+        ) : view === "days" ? (
           <DataTable
             ariaLabel="Usage log"
-            columns={columns}
+            columns={dayColumns}
             rows={rows}
             rowKey={(r) => r.id}
-            gridTemplate="110px 64px 140px minmax(120px,1fr) 96px 150px"
+            gridTemplate={DAY_GRID}
             minWidth={700}
+          />
+        ) : (
+          <DataTable
+            ariaLabel="Trips"
+            columns={tripColumns}
+            rows={trips}
+            rowKey={(t) => tripKey(t)}
+            gridTemplate="44px minmax(150px,1.2fr) 150px 140px minmax(120px,1fr) 120px 190px"
+            minWidth={820}
+            renderExpanded={(t) =>
+              expanded.has(tripKey(t)) ? (
+                <DataTable
+                  ariaLabel={`Days in trip ${t.start}`}
+                  columns={dayColumns}
+                  rows={daysForTrip(t)}
+                  rowKey={(r) => r.id}
+                  gridTemplate={DAY_GRID}
+                  minWidth={700}
+                />
+              ) : null
+            }
           />
         ))}
     </section>
   );
+}
+
+// --------------------------------------------------------------------------- //
+// Small presentational + cache helpers
+// --------------------------------------------------------------------------- //
+
+function TypePill({ type }: { type: UsageTypeValue }) {
+  const isPh = type === "personal_holiday";
+  return (
+    <Badge
+      color={isPh ? "var(--warn)" : "var(--danger)"}
+      bg={isPh ? "var(--warn-soft)" : "var(--danger-soft)"}
+      className="text-[11.5px]"
+    >
+      {isPh ? "Personal Holiday" : "PTO"}
+    </Badge>
+  );
+}
+
+function RequestedPill({
+  requested,
+  onClick,
+}: {
+  requested: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="cursor-pointer rounded-pill border px-3 py-1 text-xs font-semibold"
+      style={{
+        borderColor: requested ? "var(--mint)" : "var(--border)",
+        background: requested ? "var(--teal-soft)" : "transparent",
+        color: requested ? "var(--mint)" : "var(--text-3)",
+      }}
+      aria-pressed={requested}
+    >
+      {requested ? "✓ Yes" : "No"}
+    </button>
+  );
+}
+
+function TripRequestedBadge({ trip }: { trip: Trip }) {
+  if (trip.requested === "all")
+    return (
+      <Badge color="var(--mint)" bg="var(--teal-soft)" className="text-[11.5px]">
+        Requested
+      </Badge>
+    );
+  if (trip.requested === "none")
+    return (
+      <Badge color="var(--text-3)" bg="var(--surface-2)" className="text-[11.5px]">
+        Not requested
+      </Badge>
+    );
+  const done = trip.days.filter((d) => d.requested).length;
+  return (
+    <Badge color="var(--warn)" bg="var(--warn-soft)" className="text-[11.5px]">
+      {done} of {trip.day_count}
+    </Badge>
+  );
+}
+
+/** Set `requested` on the given day ids within each trip, recomputing its
+ *  all/some/none tri-state so the grouped view stays consistent optimistically. */
+function reflagTrips(
+  trips: Trip[],
+  ids: number[],
+  requested: boolean,
+): Trip[] {
+  const idSet = new Set(ids);
+  return trips.map((t) => {
+    if (!t.ids.some((id) => idSet.has(id))) return t;
+    const days = t.days.map((d) =>
+      idSet.has(d.id) ? { ...d, requested } : d,
+    );
+    const flags = days.map((d) => d.requested);
+    const tri = flags.every(Boolean)
+      ? "all"
+      : flags.some(Boolean)
+        ? "some"
+        : "none";
+    return { ...t, days, requested: tri as Trip["requested"] };
+  });
+}
+
+/** Drop day ids from both the flat rows and each trip; trips emptied of every
+ *  day disappear. */
+function removeIds(data: UsageResponse, ids: number[]): UsageResponse {
+  const idSet = new Set(ids);
+  const trips = data.trips
+    .map((t) => {
+      if (!t.ids.some((id) => idSet.has(id))) return t;
+      const days = t.days.filter((d) => !idSet.has(d.id));
+      if (days.length === 0) return null;
+      const flags = days.map((d) => d.requested);
+      const tri = flags.every(Boolean)
+        ? "all"
+        : flags.some(Boolean)
+          ? "some"
+          : "none";
+      return {
+        ...t,
+        days,
+        ids: t.ids.filter((id) => !idSet.has(id)),
+        day_count: days.length,
+        total_hours:
+          Math.round(days.reduce((s, d) => s + d.hours, 0) * 100) / 100,
+        end: days[days.length - 1].date,
+        start: days[0].date,
+        requested: tri as Trip["requested"],
+      };
+    })
+    .filter((t): t is Trip => t !== null);
+  return {
+    ...data,
+    rows: data.rows.filter((r) => !idSet.has(r.id)),
+    trips,
+  };
 }

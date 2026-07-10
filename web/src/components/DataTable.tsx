@@ -13,7 +13,7 @@
 // `future` → ~0.72 opacity; `past`/`default` → normal. Pass `scrollToKey` to
 // auto-scroll a row into view on first load (Accruals' current period).
 
-import { useRef, type ReactNode } from "react";
+import { Fragment, useRef, type ReactNode } from "react";
 
 export type RowState = "past" | "current" | "future" | "default";
 
@@ -38,6 +38,12 @@ export interface DataTableProps<Row> {
   rowState?: (row: Row) => RowState;
   /** Scroll the row with this key into view (block:center) on first appearance. */
   scrollToKey?: string | number | null;
+  /**
+   * Optional expandable-row content: return a node to reveal a full-width panel
+   * directly beneath the row (e.g. a trip's per-day rows), or a falsy value to
+   * leave the row collapsed. Rendered as a block sibling so it spans all cols.
+   */
+  renderExpanded?: (row: Row) => ReactNode;
   ariaLabel: string;
 }
 
@@ -55,6 +61,7 @@ export function DataTable<Row>({
   rowKey,
   rowState,
   scrollToKey,
+  renderExpanded,
   ariaLabel,
 }: DataTableProps<Row>) {
   // Track the last key we auto-scrolled to so we only do it once per target.
@@ -118,31 +125,38 @@ export function DataTable<Row>({
                 : state === "future"
                   ? { opacity: 0.72 }
                   : {};
+            const expanded = renderExpanded?.(row);
             return (
-              <div
-                key={key}
-                role="row"
-                ref={setRowRef(key)}
-                className="dt-row"
-                style={stateStyle}
-              >
-                {columns.map((c) => (
-                  <div
-                    key={c.key}
-                    role="cell"
-                    className="flex min-w-0 items-center gap-2.5"
-                    style={{ justifyContent: justify(c.align) }}
-                  >
-                    <span
-                      className="text-[11.5px] font-semibold text-ink-3"
-                      style={{ display: "var(--dt-lbl)" }}
+              <Fragment key={key}>
+                <div
+                  role="row"
+                  ref={setRowRef(key)}
+                  className="dt-row"
+                  style={stateStyle}
+                >
+                  {columns.map((c) => (
+                    <div
+                      key={c.key}
+                      role="cell"
+                      className="flex min-w-0 items-center gap-2.5"
+                      style={{ justifyContent: justify(c.align) }}
                     >
-                      {c.label ?? c.header}
-                    </span>
-                    <span className="min-w-0">{c.render(row)}</span>
+                      <span
+                        className="text-[11.5px] font-semibold text-ink-3"
+                        style={{ display: "var(--dt-lbl)" }}
+                      >
+                        {c.label ?? c.header}
+                      </span>
+                      <span className="min-w-0">{c.render(row)}</span>
+                    </div>
+                  ))}
+                </div>
+                {expanded ? (
+                  <div className="border-b border-line bg-surface-2 px-3 py-3">
+                    {expanded}
                   </div>
-                ))}
-              </div>
+                ) : null}
+              </Fragment>
             );
           })}
         </div>

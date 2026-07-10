@@ -96,7 +96,7 @@ def test_usage_list_shape_and_serialization(client):
         json={"start": "2026-07-13", "end": "2026-07-13", "type": "personal_holiday"},
     )
     data = client.get("/api/usage").json()
-    assert set(data.keys()) == {"rows", "years", "hire_date", "hours_per_day"}
+    assert set(data.keys()) == {"rows", "trips", "years", "hire_date", "hours_per_day"}
     assert data["hire_date"] == "2023-01-09"
     assert data["hours_per_day"] == 8.0
 
@@ -194,6 +194,110 @@ def test_usage_list_filters(client):
 
     none = client.get("/api/usage", params={"year": 2099}).json()
     assert none["rows"] == []
+
+
+# --------------------------------------------------------------------------- #
+# Usage: trips
+# --------------------------------------------------------------------------- #
+
+
+def test_usage_list_trips_shape(client):
+    """A Fri→next-Mon range (weekend bridged) is one trip in the GET payload."""
+    client.post(
+        "/api/usage",
+        json={"start": "2026-07-17", "end": "2026-07-20", "type": "pto", "reason": "Cruise"},
+    )
+    data = client.get("/api/usage").json()
+    assert "trips" in data
+    assert len(data["trips"]) == 1
+    trip = data["trips"][0]
+    assert set(trip.keys()) == {
+        "start", "end", "days", "day_count", "total_hours",
+        "type", "reason", "requested", "ids",
+    }
+    assert trip["start"] == "2026-07-17"
+    assert trip["end"] == "2026-07-20"
+    assert trip["day_count"] == 2  # Fri + Mon; Sat/Sun are not working days
+    assert trip["reason"] == "Cruise"
+    assert trip["requested"] == "none"
+    # Nested days carry the canonical UsageEntry shape.
+    assert set(trip["days"][0].keys()) == {
+        "id", "date", "hours", "type", "reason", "requested"
+    }
+
+
+def test_usage_list_trips_filter_then_group(client):
+    """Filtering by requested first can split what would otherwise be one trip."""
+    resp = client.post(
+        "/api/usage",
+        json={"start": "2026-07-13", "end": "2026-07-15", "type": "pto", "reason": "Trip"},
+    )
+    ids = [r["id"] for r in resp.json()["created"]]  # Mon, Tue, Wed
+    # Mark only the middle day requested.
+    client.patch(f"/api/usage/{ids[1]}", json={"requested": True})
+
+    unfiltered = client.get("/api/usage").json()
+    assert len(unfiltered["trips"]) == 1  # all three still one trip
+
+    only_requested = client.get("/api/usage", params={"requested": "true"}).json()
+    assert [t["day_count"] for t in only_requested["trips"]] == [1]
+
+    only_unrequested = client.get("/api/usage", params={"requested": "false"}).json()
+    # Mon and Wed remain, but Tue is filtered out → the working-day gap splits.
+    assert len(only_unrequested["trips"]) == 2
+
+
+def test_usage_bulk_patch_requested_and_reason(client):
+    resp = client.post(
+        "/api/usage",
+        json={"start": "2026-07-13", "end": "2026-07-15", "type": "pto"},
+    )
+    ids = [r["id"] for r in resp.json()["created"]]
+
+    resp = client.patch(
+        "/api/usage/bulk", json={"ids": ids, "requested": True, "reason": "Cruise"}
+    )
+    assert resp.status_code == 200
+    rows = resp.json()["rows"]
+    assert len(rows) == 3
+    assert all(r["requested"] is True for r in rows)
+    assert all(r["reason"] == "Cruise" for r in rows)
+    # Persisted for real.
+    assert all(e.requested and e.reason == "Cruise" for e in _all_entries())
+
+
+def test_usage_bulk_patch_404_on_bad_id_is_atomic(client):
+    resp = client.post(
+        "/api/usage",
+        json={"start": "2026-07-13", "end": "2026-07-14", "type": "pto"},
+    )
+    ids = [r["id"] for r in resp.json()["created"]]
+
+    resp = client.patch("/api/usage/bulk", json={"ids": [*ids, 999999], "requested": True})
+    assert resp.status_code == 404
+    # Nothing was mutated — the missing id aborts the whole batch.
+    assert all(e.requested is False for e in _all_entries())
+
+
+def test_usage_bulk_delete_and_balance_effect(client):
+    # Past working days in the current year so they land in the folded ledger.
+    resp = client.post(
+        "/api/usage",
+        json={"start": "2026-03-02", "end": "2026-03-04", "type": "pto"},  # Mon–Wed
+    )
+    ids = [r["id"] for r in resp.json()["created"]]
+    assert len(ids) == 3
+
+    before = client.get("/api/dashboard").json()["pto_used_ytd"]
+    assert before == 24.0  # three 8h PTO days used year-to-date
+
+    resp = client.post("/api/usage/bulk-delete", json={"ids": ids})
+    assert resp.status_code == 200
+    assert resp.json() == {"deleted": 3}
+    assert not _all_entries()
+
+    after = client.get("/api/dashboard").json()["pto_used_ytd"]
+    assert after == 0.0  # deletion ripples through the balance
 
 
 # --------------------------------------------------------------------------- #

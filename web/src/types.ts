@@ -63,11 +63,33 @@ export interface AccrualsResponse {
   current_index: number;
 }
 
+// A run of mentally-adjacent same-type/same-reason days (a "trip"), grouped
+// server-side from the same filtered row set (epoch/services.group_trips).
+export interface Trip {
+  start: string; // ISO date
+  end: string; // ISO date
+  days: UsageEntry[];
+  day_count: number;
+  total_hours: number;
+  type: UsageTypeValue;
+  reason: string | null;
+  requested: "all" | "some" | "none";
+  ids: number[];
+}
+
 export interface UsageResponse {
   rows: UsageEntry[];
+  trips: Trip[];
   years: number[];
   hire_date: string; // ISO date
   hours_per_day: number;
+}
+
+// PATCH /api/usage/bulk — trip-level set of requested and/or reason.
+export interface UsageBulkPatch {
+  ids: number[];
+  requested?: boolean;
+  reason?: string;
 }
 
 // POST /api/usage body → per-day expansion happens server-side.

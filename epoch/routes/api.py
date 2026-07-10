@@ -28,7 +28,7 @@ from epoch.engine import (
     compute_ledger,
     period_index_for,
 )
-from epoch.models import UsageEntry, now_utc
+from epoch.models import CompanyHoliday, UsageEntry, now_utc
 from epoch.routes.csv_routes import apply_usage_import
 from epoch.services import (
     SETTINGS_FIELDS,
@@ -37,7 +37,9 @@ from epoch.services import (
     create_tier,
     dashboard_stats,
     date_from_iso,
+    get_entries,
     get_entry,
+    group_trips,
     load_holidays,
     load_settings,
     load_tiers,
@@ -48,6 +50,7 @@ from epoch.services import (
     row_state,
     today,
     update_tier,
+    usage_entry_json,
     usage_type,
     validate_settings,
 )
@@ -62,14 +65,7 @@ router = APIRouter(prefix="/api", tags=["api"])
 
 def _usage_json(entry: UsageEntry) -> dict:
     """The canonical UsageEntry JSON shape consumed by the SPA."""
-    return {
-        "id": entry.id,
-        "date": entry.date.isoformat(),
-        "hours": entry.hours,
-        "type": entry.type.value,
-        "reason": entry.reason,
-        "requested": entry.requested,
-    }
+    return usage_entry_json(entry)
 
 
 def _period_json(row: PeriodRow, on: date, current_index: int) -> dict:
@@ -174,6 +170,7 @@ async def usage_list(
     with get_session() as session:
         cfg = load_engine_config(session)
         entries = list(session.exec(select(UsageEntry)).all())
+        holidays = {h.date for h in session.exec(select(CompanyHoliday)).all()}
 
     if type:
         wanted = usage_type(type)
@@ -185,8 +182,11 @@ async def usage_list(
 
     entries.sort(key=lambda e: (e.date, e.id or 0))
     all_years = sorted({e.date.year for e in entries})
+    # Trips are grouped from the SAME filtered row set — a year/requested
+    # filter can therefore split what would otherwise be one trip.
     return {
         "rows": [_usage_json(e) for e in entries],
+        "trips": group_trips(entries, holidays),
         "years": all_years,
         "hire_date": cfg.hire_date.isoformat(),
         "hours_per_day": cfg.hours_per_day,
@@ -216,6 +216,46 @@ async def usage_create(request: Request) -> dict:
             bool(body.get("requested", False)),
         )
         return {"created": [_usage_json(e) for e in created]}
+
+
+@router.patch("/usage/bulk")
+async def usage_bulk_patch(request: Request) -> dict:
+    """Trip-level edit: set ``requested`` and/or ``reason`` on many rows at once.
+
+    ``{ids, requested?, reason?}`` → ``{rows}``. 404 if any id is missing; the
+    lookup happens before any mutation so the whole batch is atomic.
+    """
+    body = await request.json()
+    ids = [int(i) for i in body.get("ids", [])]
+    with get_session() as session:
+        entries = get_entries(session, ids)  # 404 short-circuits before writes
+        for entry in entries:
+            if "requested" in body:
+                entry.requested = bool(body["requested"])
+            if "reason" in body:
+                entry.reason = (body["reason"] or "").strip() or None
+            entry.updated_at = now_utc()
+            session.add(entry)
+        session.commit()
+        for entry in entries:
+            session.refresh(entry)
+        return {"rows": [_usage_json(e) for e in entries]}
+
+
+@router.post("/usage/bulk-delete")
+async def usage_bulk_delete(request: Request) -> dict:
+    """Delete a whole trip in one atomic commit → ``{deleted: <count>}``."""
+    body = await request.json()
+    ids = [int(i) for i in body.get("ids", [])]
+    with get_session() as session:
+        deleted = 0
+        for entry_id in ids:
+            entry = session.get(UsageEntry, entry_id)
+            if entry is not None:
+                session.delete(entry)
+                deleted += 1
+        session.commit()
+    return {"deleted": deleted}
 
 
 @router.patch("/usage/{entry_id}")

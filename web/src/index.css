@@ -160,6 +160,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 .dt-head {
   display: var(--dt-thead);
   grid-template-columns: var(--dt-desk-cols);
+  gap: 6px; /* keep header columns aligned with .dt-row cells */
 }
 /* Fixed min-width forces horizontal scroll on narrow *desktop* so wide tables
    don't clip (HANDOFF §11). It must NOT apply once rows collapse to cards,

@@ -19,6 +19,7 @@ import type {
   SettingsUpdate,
   StatsResponse,
   Tier,
+  UsageBulkPatch,
   UsageCreate,
   UsageEntry,
   UsagePatch,
@@ -114,6 +115,16 @@ export const api = {
     }),
   deleteUsage: (id: number) =>
     apiFetch<void>(`/api/usage/${id}`, { method: "DELETE" }),
+  bulkPatchUsage: (body: UsageBulkPatch) =>
+    apiFetch<{ rows: UsageEntry[] }>("/api/usage/bulk", {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  bulkDeleteUsage: (ids: number[]) =>
+    apiFetch<{ deleted: number }>("/api/usage/bulk-delete", {
+      method: "POST",
+      body: JSON.stringify({ ids }),
+    }),
 
   // --- Projection / stats ---
   projection: (date?: string) =>
