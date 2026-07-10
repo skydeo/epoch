@@ -33,6 +33,8 @@ export function Usage() {
   const [type, setType] = useState<"" | UsageTypeValue>("");
   const [yearFilter, setYearFilter] = useState<"" | number>("");
   const [requested, setRequested] = useState<"" | "true" | "false">("");
+  // Newest date first by default (current data at the top).
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   const filters: UsageFilters = useMemo(
     () => ({
@@ -47,6 +49,15 @@ export function Usage() {
     queryKey: queryKeys.usage(filters as Record<string, unknown>),
     queryFn: () => api.usage(filters),
   });
+
+  // Rows arrive ascending by (date, id); flip for descending.
+  const rows = useMemo(() => {
+    const base = query.data?.rows ?? [];
+    const sorted = [...base].sort(
+      (a, b) => a.date.localeCompare(b.date) || a.id - b.id,
+    );
+    return sortDir === "asc" ? sorted : sorted.reverse();
+  }, [query.data, sortDir]);
 
   // --- Balance-rippling invalidation: a usage change shifts every downstream
   //     balance (dashboard cards, chart, accrual ledger). HANDOFF §7. ---
@@ -453,6 +464,15 @@ export function Usage() {
             <option value="false">No</option>
           </select>
         </Field>
+        <div className="flex items-end">
+          <Button
+            variant="ghost"
+            onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+            aria-label={`Sort by date ${sortDir === "asc" ? "descending" : "ascending"}`}
+          >
+            Date {sortDir === "asc" ? "↑" : "↓"}
+          </Button>
+        </div>
       </div>
 
       {query.isPending && (
@@ -477,7 +497,7 @@ export function Usage() {
           <DataTable
             ariaLabel="Usage log"
             columns={columns}
-            rows={query.data.rows}
+            rows={rows}
             rowKey={(r) => r.id}
             gridTemplate="110px 64px 140px minmax(120px,1fr) 96px 150px"
             minWidth={700}

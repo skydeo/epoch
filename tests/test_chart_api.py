@@ -20,6 +20,7 @@ CHART_KEYS = {
     "max_accrued",
     "cap",
     "today_index",
+    "years",
 }
 
 
@@ -65,6 +66,15 @@ def test_chart_today_index(client):
     start = date.fromisoformat(data["labels"][idx])
     today = date.today()
     assert start <= today <= start + timedelta(days=13)
+
+
+def test_chart_years(client):
+    """`years` lists calendar years newest-first, from hire year to this year."""
+    data = client.get("/api/chart").json()
+    years = data["years"]
+    assert years, "expected at least one year"
+    assert years == sorted(years, reverse=True)
+    assert date.today().year in years
 
 
 def test_chart_range_filtering(client):

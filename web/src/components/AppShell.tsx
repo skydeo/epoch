@@ -89,24 +89,27 @@ export function AppShell() {
 
       {/* ===== Main column ===== */}
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Mobile top bar (< 900px) */}
-        <header className="sticky top-0 z-20 flex items-center justify-between border-b border-line bg-bg-elev px-4 py-3 min-[900px]:hidden">
-          <div className="flex items-center gap-2.5">
-            <BrandMark size={28} />
-            <span className="font-display text-[17px] font-bold">epoch</span>
-          </div>
-          <ThemeToggle variant="compact" />
-        </header>
-
-        {/* Mobile horizontal pill nav (< 900px) */}
-        <nav
-          aria-label="Primary"
-          className="sticky top-[57px] z-[19] flex gap-2 overflow-x-auto border-b border-line bg-bg-elev px-4 py-3 min-[900px]:hidden"
-        >
-          {NAV.map((item) => (
-            <PillLink key={item.to} item={item} />
-          ))}
-        </nav>
+        {/* Mobile sticky header + pill nav (< 900px). Both live inside ONE
+            sticky wrapper so there is no magic top-offset between them: the
+            whole block pins at top:0 and the pill row keeps its padding while
+            scrolling (no shift). */}
+        <div className="sticky top-0 z-20 min-[900px]:hidden">
+          <header className="flex items-center justify-between border-b border-line bg-bg-elev px-4 py-3">
+            <div className="flex items-center gap-2.5">
+              <BrandMark size={28} />
+              <span className="font-display text-[17px] font-bold">epoch</span>
+            </div>
+            <ThemeToggle variant="compact" />
+          </header>
+          <nav
+            aria-label="Primary"
+            className="flex gap-2 overflow-x-auto border-b border-line bg-bg-elev px-4 py-3"
+          >
+            {NAV.map((item) => (
+              <PillLink key={item.to} item={item} />
+            ))}
+          </nav>
+        </div>
 
         <main className="mx-auto w-full max-w-[1180px] flex-1 px-4 py-[18px] min-[900px]:px-[44px] min-[900px]:py-[34px]">
           <Outlet />

@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { PageHeader } from "../components/PageHeader";
 import { DataTable, type Column, type RowState } from "../components/DataTable";
-import { Badge, Field, inputCls } from "../components/ui";
+import { Badge, Button, Field, inputCls } from "../components/ui";
 import { EmptyState, ErrorState, Spinner } from "../components/states";
 import { api, queryKeys } from "../lib/api";
 import { fmt2, fmtG, fmtChartLabel, fmtMonthDay } from "../lib/format";
@@ -133,18 +133,27 @@ const rowState = (r: AccrualRow): RowState => r.state;
 export function Accruals() {
   // "all" → no year filter; otherwise a specific calendar year.
   const [year, setYear] = useState<number | "all">("all");
+  // Newest period first by default (current data at the top).
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   const query = useQuery({
     queryKey: queryKeys.accruals(year === "all" ? undefined : year),
     queryFn: () => api.accruals(year === "all" ? undefined : year),
   });
 
-  // Auto-scroll the current period into view on load (block:center).
+  // Rows arrive ascending by period index; reverse for descending.
+  const rows = useMemo(() => {
+    const base = query.data?.rows ?? [];
+    return sortDir === "asc" ? base : [...base].reverse();
+  }, [query.data, sortDir]);
+
+  // Auto-scroll the current period into view on load (block:center). With the
+  // default descending sort the current period sits near the top, so this is
+  // nearly a no-op — but it keeps ascending-mode behavior correct.
   const scrollToKey = useMemo(() => {
-    const rows = query.data?.rows ?? [];
     const cur = rows.find((r) => r.is_current);
     return cur ? cur.index : null;
-  }, [query.data]);
+  }, [rows]);
 
   return (
     <section className="animate-epfade">
@@ -170,6 +179,13 @@ export function Accruals() {
             ))}
           </select>
         </Field>
+        <Button
+          variant="ghost"
+          onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+          aria-label={`Sort by period ${sortDir === "asc" ? "descending" : "ascending"}`}
+        >
+          Period {sortDir === "asc" ? "↑" : "↓"}
+        </Button>
         <div className="ml-auto flex flex-wrap items-center gap-4">
           {LEGEND.map((l) => (
             <span
@@ -208,7 +224,7 @@ export function Accruals() {
           <DataTable
             ariaLabel="Accrual ledger"
             columns={COLUMNS}
-            rows={query.data.rows}
+            rows={rows}
             rowKey={(r) => r.index}
             rowState={rowState}
             gridTemplate="40px minmax(130px,1.5fr) 96px 56px 50px 116px 104px"

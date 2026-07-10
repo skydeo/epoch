@@ -65,6 +65,11 @@ async def chart_data(start: str | None = None, end: str | None = None) -> dict:
     # sheet's "Max PTO Accrued" horizontal line), not just the visible window.
     max_accrued = max((r.balance for r in ledger), default=0.0)
 
+    # Calendar years available for the chart's year filter — hire year through
+    # the current year, newest first (2026, 2025, …). Independent of the window
+    # so the dropdown stays fully populated even when a preset/year clips it.
+    years = list(range(today.year, cfg.hire_date.year - 1, -1))
+
     return {
         "labels": [r.start.isoformat() for r in window],
         "balance": [r.balance for r in window],
@@ -73,6 +78,7 @@ async def chart_data(start: str | None = None, end: str | None = None) -> dict:
         "max_accrued": round(max_accrued, 2),
         "cap": cfg.max_balance_hours,
         "today_index": today_index,
+        "years": years,
     }
 
 

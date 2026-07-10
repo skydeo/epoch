@@ -27,6 +27,7 @@ export interface ChartData {
   max_accrued: number;
   cap: number;
   today_index: number; // -1 when the current period is outside the window
+  years: number[]; // calendar years for the year filter, newest first
 }
 
 // --- Shapes for later phases (Accruals / Usage / Projection / Settings). Defined

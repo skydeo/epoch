@@ -418,7 +418,7 @@ export function Settings() {
         {data.fields.map((f: SettingField) => (
           <label
             key={f.key}
-            className="flex flex-col gap-1.5 rounded-tile border border-line bg-surface px-4 py-3.5 shadow-[var(--shadow-sm)]"
+            className="flex min-w-0 flex-col gap-1.5 rounded-tile border border-line bg-surface px-4 py-3.5 shadow-[var(--shadow-sm)]"
           >
             <span className="text-[12.5px] font-semibold text-ink">{f.label}</span>
             {f.kind === "bool" ? (
@@ -441,7 +441,8 @@ export function Settings() {
                 type={f.kind === "date" ? "date" : f.kind === "int" ? "number" : "text"}
                 inputMode={f.kind === "float" ? "decimal" : undefined}
                 step={f.kind === "int" ? "1" : f.kind === "float" ? "any" : undefined}
-                className={`${inputCls} w-full`}
+                className={`${inputCls} w-full max-w-full`}
+                style={{ minWidth: 0 }}
                 value={form?.[f.key] ?? ""}
                 onChange={(e) =>
                   setForm((s) => ({ ...(s ?? {}), [f.key]: e.target.value }))

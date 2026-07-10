@@ -71,13 +71,21 @@ function palette(theme: Theme) {
       };
 }
 
+const isoDay = (d: Date) => d.toISOString().slice(0, 10);
+
+// Each preset clips the window with an explicit `end` so it never runs out to
+// the API's +18-month projection horizon (all presets end at today's period).
+//  · YTD → Jan 1 this year → today
+//  · 1 yr → trailing 12 months → today
+//  · All → hire date (no start) → today
 function rangeParams(range: Range): ChartParams {
-  if (range === "all") return {};
   const now = new Date();
-  if (range === "ytd") return { start: `${now.getFullYear()}-01-01` };
+  const end = isoDay(now);
+  if (range === "all") return { end };
+  if (range === "ytd") return { start: `${now.getFullYear()}-01-01`, end };
   const back = new Date(now);
   back.setFullYear(back.getFullYear() - 1);
-  return { start: back.toISOString().slice(0, 10) };
+  return { start: isoDay(back), end };
 }
 
 // Inline plugin: a translucent vertical band over the current pay period.
@@ -236,9 +244,32 @@ function ChartCanvas({
             labels: {
               color: c.ink,
               usePointStyle: true,
-              pointStyle: "circle",
-              boxWidth: 8,
+              boxWidth: 14,
+              boxHeight: 8,
               font: { family: "Figtree", size: 12 },
+              // Reference lines (Max Accrued / Cap) are drawn as dashed line
+              // swatches, not open circles; bars as filled squares; the balance
+              // series keeps its round marker.
+              generateLabels: (chart) =>
+                chart.data.datasets.map((ds, i) => {
+                  const isLine = ds.type === "line";
+                  const dash =
+                    Array.isArray((ds as { borderDash?: number[] }).borderDash)
+                      ? (ds as { borderDash?: number[] }).borderDash ?? []
+                      : [];
+                  const border = ds.borderColor as string | undefined;
+                  const fill = ds.backgroundColor as string | undefined;
+                  return {
+                    text: String(ds.label ?? ""),
+                    fillStyle: isLine ? "transparent" : fill,
+                    strokeStyle: isLine ? border ?? fill : fill,
+                    lineWidth: isLine ? (ds.borderWidth as number) ?? 2 : 0,
+                    lineDash: dash,
+                    pointStyle: isLine ? "line" : "rect",
+                    hidden: !chart.isDatasetVisible(i),
+                    datasetIndex: i,
+                  };
+                }),
             },
           },
           tooltip: {
@@ -268,15 +299,29 @@ function ChartCanvas({
 export function BalanceChart() {
   const { theme } = useTheme();
   const [range, setRange] = useState<Range>("all");
+  // A specific calendar year overrides the preset; null = a preset is active.
+  const [year, setYear] = useState<number | null>(null);
   const [showCap, setShowCap] = useState(false);
 
-  const params = useMemo(() => rangeParams(range), [range]);
+  const params = useMemo<ChartParams>(
+    () =>
+      year !== null
+        ? { start: `${year}-01-01`, end: `${year}-12-31` }
+        : rangeParams(range),
+    [range, year],
+  );
   const query = useQuery({
     queryKey: queryKeys.chart(params),
     queryFn: () => api.chart(params),
   });
 
+  const years = query.data?.years ?? [];
   const empty = query.data && query.data.labels.length === 0;
+
+  const pickPreset = (r: Range) => {
+    setYear(null);
+    setRange(r);
+  };
 
   return (
     <article className="rounded-card border border-line bg-surface px-[22px] pb-[18px] pt-[22px] shadow-[var(--shadow)]">
@@ -289,7 +334,7 @@ export function BalanceChart() {
             End-of-period balance, hours used, and the all-time peak.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <label className="flex cursor-pointer items-center gap-1.5 text-[12.5px] font-semibold text-ink-2">
             <input
               type="checkbox"
@@ -301,10 +346,32 @@ export function BalanceChart() {
           </label>
           <SegmentedControl
             segments={RANGES}
-            value={range}
-            onChange={setRange}
+            // When a year is picked no preset is highlighted.
+            value={year !== null ? ("" as Range) : range}
+            onChange={pickPreset}
             ariaLabel="Chart date range"
           />
+          <select
+            aria-label="Chart year"
+            value={year ?? ""}
+            onChange={(e) =>
+              setYear(e.target.value === "" ? null : Number(e.target.value))
+            }
+            className={[
+              "rounded-[11px] border bg-surface-2 px-2.5 py-1.5 text-[12.5px] font-semibold outline-none",
+              "focus-visible:ring-2 focus-visible:ring-primary",
+              year !== null
+                ? "border-primary text-primary"
+                : "border-line text-ink-2",
+            ].join(" ")}
+          >
+            <option value="">Year…</option>
+            {years.map((y) => (
+              <option key={y} value={y}>
+                {y}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
