@@ -3,6 +3,8 @@
 // wrappers as later phases add fields.
 
 export type UsageTypeValue = "pto" | "personal_holiday";
+/** What a new range is booked as: a fixed type, or remaining PH first then PTO. */
+export type BookingType = UsageTypeValue | "ph_first";
 
 export interface DashboardStats {
   current_balance: number;
@@ -96,7 +98,7 @@ export interface UsageBulkPatch {
 export interface UsageCreate {
   start: string;
   end: string;
-  type: UsageTypeValue;
+  type: BookingType;
   reason: string;
   requested: boolean;
 }
@@ -125,9 +127,11 @@ export interface ProjectionSnap {
 export interface ProjectionWhatIf {
   start: string;
   end: string;
-  type: UsageTypeValue;
+  type: BookingType;
   days: number;
   hours: number;
+  ph_hours: number;
+  pto_hours: number;
   skipped_holidays: string[];
 }
 
@@ -166,7 +170,7 @@ export interface ProjectionParams {
   date?: string;
   whatif_start?: string;
   whatif_end?: string;
-  whatif_type?: UsageTypeValue;
+  whatif_type?: BookingType;
   include_planned?: boolean;
 }
 

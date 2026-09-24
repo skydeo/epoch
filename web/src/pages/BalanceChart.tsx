@@ -314,7 +314,7 @@ function ChartCanvas({
 
 export function BalanceChart() {
   const { theme } = useTheme();
-  const [range, setRange] = useState<Range>("all");
+  const [range, setRange] = useState<Range>("1yr");
   // A specific calendar year overrides the preset; null = a preset is active.
   const [year, setYear] = useState<number | null>(null);
   const [showCap, setShowCap] = useState(false);

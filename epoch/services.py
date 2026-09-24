@@ -16,7 +16,7 @@ from datetime import date, timedelta
 from fastapi import HTTPException, status
 from sqlmodel import select
 
-from epoch.domain import expand_range, load_engine_config
+from epoch.domain import expand_range, load_engine_config, load_usage
 from epoch.engine import (
     EngineConfig,
     PeriodRow,
@@ -153,6 +153,31 @@ def projection_snapshot(cfg: EngineConfig, usage, on: date, target: date) -> dic
     }
 
 
+def allocate_ph_first(
+    cfg: EngineConfig, usage: list[UsageItem], days: list[date]
+) -> list[UsageItem]:
+    """Spend each calendar year's remaining personal-holiday hours on ``days``
+    first (in date order), then fall back to PTO.
+
+    "Remaining" is the annual grant minus every PH entry already on the books
+    for that year, planned ones included. A day that only partly fits the PH
+    left is split into a PH entry and a PTO entry on the same date.
+    """
+    remaining: dict[int, float] = {}
+    out: list[UsageItem] = []
+    for d in sorted(days):
+        if d.year not in remaining:
+            used = sum(u.hours for u in usage if u.is_ph and u.date.year == d.year)
+            remaining[d.year] = max(0.0, cfg.ph_annual_hours - used)
+        ph = min(remaining[d.year], cfg.hours_per_day)
+        remaining[d.year] -= ph
+        if ph > 0:
+            out.append(UsageItem(date=d, hours=round(ph, 2), is_ph=True))
+        if cfg.hours_per_day - ph > 0:
+            out.append(UsageItem(date=d, hours=round(cfg.hours_per_day - ph, 2)))
+    return out
+
+
 def whatif_days(
     start: date, end: date, holidays: set[date]
 ) -> tuple[list[date], list[date]]:
@@ -261,8 +286,12 @@ def create_range_entries(
     kind: UsageType,
     reason: str | None,
     requested: bool,
+    ph_first: bool = False,
 ) -> list[UsageEntry]:
     """Expand a range into per-day usage rows at ``hours_per_day`` each.
+
+    ``ph_first`` ignores ``kind``: remaining personal-holiday hours are used
+    first, then PTO (see ``allocate_ph_first``).
 
     Raises a 400 ``HTTPException`` if the range starts before the hire date or
     expands to zero working days (weekend/holiday-only).
@@ -285,12 +314,17 @@ def create_range_entries(
         )
 
     cleaned_reason = (reason or "").strip() or None
+    if ph_first:
+        items = allocate_ph_first(cfg, load_usage(session), days)
+    else:
+        is_ph = kind == UsageType.personal_holiday
+        items = [UsageItem(date=d, hours=cfg.hours_per_day, is_ph=is_ph) for d in days]
     created: list[UsageEntry] = []
-    for day in days:
+    for item in items:
         entry = UsageEntry(
-            date=day,
-            hours=cfg.hours_per_day,
-            type=kind,
+            date=item.date,
+            hours=item.hours,
+            type=UsageType.personal_holiday if item.is_ph else UsageType.pto,
             reason=cleaned_reason,
             requested=requested,
         )

@@ -53,6 +53,7 @@ from epoch.services import (
     update_tier,
     usage_entry_json,
     usage_type,
+    allocate_ph_first,
     validate_settings,
     whatif_days,
 )
@@ -216,6 +217,7 @@ async def usage_create(request: Request) -> dict:
             usage_type(body.get("type", "pto")),
             body.get("reason"),
             bool(body.get("requested", False)),
+            ph_first=body.get("type") == "ph_first",
         )
         return {"created": [_usage_json(e) for e in created]}
 
@@ -366,15 +368,26 @@ async def projection(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={"error": "The trip starts before the hire date."},
             )
-        is_ph = usage_type(whatif_type).value == "personal_holiday"
         days, skipped = whatif_days(w_start, w_end, holidays)
-        extra = [UsageItem(date=d, hours=cfg.hours_per_day, is_ph=is_ph) for d in days]
+        if whatif_type == "ph_first":
+            # PH left is judged against the same usage the scenario folds.
+            base = usage if include_planned else [u for u in usage if u.date <= on]
+            extra = allocate_ph_first(cfg, base, days)
+            kind = "ph_first"
+        else:
+            is_ph = usage_type(whatif_type).value == "personal_holiday"
+            extra = [
+                UsageItem(date=d, hours=cfg.hours_per_day, is_ph=is_ph) for d in days
+            ]
+            kind = "personal_holiday" if is_ph else "pto"
         whatif = {
             "start": w_start.isoformat(),
             "end": w_end.isoformat(),
-            "type": "personal_holiday" if is_ph else "pto",
+            "type": kind,
             "days": len(days),
             "hours": round(len(days) * cfg.hours_per_day, 2),
+            "ph_hours": round(sum(u.hours for u in extra if u.is_ph), 2),
+            "pto_hours": round(sum(u.hours for u in extra if not u.is_ph), 2),
             "skipped_holidays": [d.isoformat() for d in skipped],
         }
 

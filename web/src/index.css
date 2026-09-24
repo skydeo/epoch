@@ -106,6 +106,19 @@ body {
 input[type="date"]::-webkit-calendar-picker-indicator {
   cursor: pointer;
 }
+/* iOS Safari gives date inputs an intrinsic width that ignores width:100%,
+   so they overflow narrow cards (Settings' hire date). */
+@supports (-webkit-touch-callout: none) {
+  input[type="date"] {
+    -webkit-appearance: none;
+    appearance: none;
+    min-width: 0;
+    display: block;
+  }
+  input[type="date"]::-webkit-date-and-time-value {
+    text-align: left;
+  }
+}
 [data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator {
   filter: invert(1) brightness(1.4);
 }

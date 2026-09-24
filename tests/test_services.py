@@ -139,3 +139,18 @@ def test_multi_week_range_across_weekends_is_one_trip():
     assert trips[0]["start"] == "2026-07-06"
     assert trips[0]["end"] == "2026-07-24"
     assert trips[0]["day_count"] == 15
+
+
+def test_allocate_ph_first_splits_a_partial_day_and_resets_each_year(cfg):
+    from epoch.engine import UsageItem
+    from epoch.services import allocate_ph_first
+
+    used = [UsageItem(date(2026, 3, 2), 12.0, is_ph=True)]  # 4 h PH left in 2026
+    days = [date(2026, 12, 30), date(2026, 12, 31), date(2027, 1, 4)]
+    out = allocate_ph_first(cfg, used, days)
+    assert [(u.date, u.hours, u.is_ph) for u in out] == [
+        (date(2026, 12, 30), 4.0, True),
+        (date(2026, 12, 30), 4.0, False),
+        (date(2026, 12, 31), 8.0, False),
+        (date(2027, 1, 4), 8.0, True),  # fresh 2027 grant
+    ]

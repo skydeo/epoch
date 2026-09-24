@@ -11,7 +11,7 @@ import { ApiError, api, queryKeys, type UsageFilters } from "../lib/api";
 import { fmtRange, parseIso, todayIso } from "../lib/date";
 import { useIsMobile } from "../lib/useMediaQuery";
 import { fmtG } from "../lib/format";
-import type { Trip, UsageEntry, UsageResponse, UsageTypeValue } from "../types";
+import type { BookingType, Trip, UsageEntry, UsageResponse, UsageTypeValue } from "../types";
 
 const editInputCls =
   "rounded-field border border-line bg-bg-elev px-2 py-1.5 text-[13px] text-ink " +
@@ -217,7 +217,7 @@ export function Usage() {
   const [form, setForm] = useState({
     start: todayIso(),
     end: todayIso(),
-    type: "pto" as UsageTypeValue,
+    type: "pto" as BookingType,
     reason: "",
     requested: false,
   });
@@ -846,11 +846,12 @@ export function Usage() {
             className={inputCls}
             value={form.type}
             onChange={(e) =>
-              setForm((f) => ({ ...f, type: e.target.value as UsageTypeValue }))
+              setForm((f) => ({ ...f, type: e.target.value as BookingType }))
             }
           >
             <option value="pto">PTO</option>
             <option value="personal_holiday">Personal Holiday</option>
+            <option value="ph_first">PH first, then PTO</option>
           </select>
         </Field>
         <Field label="Reason" className="col-span-2 flex-1 basis-40">
@@ -955,6 +956,41 @@ export function Usage() {
       </div>
       )}
 
+      {/* Active filters as removable chips — always visible, so a filter is
+          never "stuck" behind a collapsed panel. */}
+      {activeFilters > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-1.5">
+          {type && (
+            <FilterChip
+              label={type === "pto" ? "PTO" : "Personal holiday"}
+              onClear={() => setType("")}
+            />
+          )}
+          {yearFilter !== "" && (
+            <FilterChip label={String(yearFilter)} onClear={() => setYearFilter("")} />
+          )}
+          {requested && (
+            <FilterChip
+              label={requested === "true" ? "Requested" : "Not requested"}
+              onClear={() => setRequested("")}
+            />
+          )}
+          {activeFilters > 1 && (
+            <button
+              type="button"
+              onClick={() => {
+                setType("");
+                setYearFilter("");
+                setRequested("");
+              }}
+              className="h-8 px-2 text-[13px] font-semibold text-primary"
+            >
+              Clear all
+            </button>
+          )}
+        </div>
+      )}
+
       {query.isPending && (
         <div className="rounded-card border border-line bg-surface shadow-[var(--shadow-sm)]">
           <Spinner label="Loading usage…" />
@@ -1007,6 +1043,25 @@ export function Usage() {
 // --------------------------------------------------------------------------- //
 // Small presentational + cache helpers
 // --------------------------------------------------------------------------- //
+
+function FilterChip({ label, onClear }: { label: string; onClear: () => void }) {
+  return (
+    <span className="inline-flex h-8 items-center gap-1 rounded-pill border border-primary bg-primary-soft pl-3 pr-1 text-[13px] font-semibold text-primary">
+      {label}
+      <button
+        type="button"
+        onClick={onClear}
+        aria-label={`Remove filter: ${label}`}
+        className="flex h-7 w-7 items-center justify-center rounded-full"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M9 9l6 6M15 9l-6 6" />
+        </svg>
+      </button>
+    </span>
+  );
+}
 
 function TypePill({ type }: { type: UsageTypeValue }) {
   const isPh = type === "personal_holiday";

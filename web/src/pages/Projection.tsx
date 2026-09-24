@@ -16,7 +16,7 @@ import { ErrorState, Spinner } from "../components/states";
 import { ApiError, api, queryKeys } from "../lib/api";
 import { addDays, addMonths, fmtLong, fmtShort, todayIso } from "../lib/date";
 import { fmtG } from "../lib/format";
-import type { ProjectionParams, ProjectionResponse, UsageTypeValue } from "../types";
+import type { BookingType, ProjectionParams, ProjectionResponse, UsageTypeValue } from "../types";
 
 // Pull the human message out of a 400 { detail: { error } } body (apiFetch keeps
 // the raw body on ApiError; the detail here is an object, not a plain string).
@@ -192,16 +192,18 @@ export function Projection() {
   const [tripEnd, setTripEnd] = useState("");
   const [tripType, setTripType] = useState<UsageTypeValue>("pto");
   const [tripName, setTripName] = useState("");
+  const [phFirst, setPhFirst] = useState(false);
+  const booking: BookingType = tripType === "pto" && phFirst ? "ph_first" : tripType;
   const [includePlanned, setIncludePlanned] = useState(true);
 
   const hasTrip = !!tripStart && !!tripEnd;
   const draft: ProjectionParams = useMemo(
     () => ({
       date: target || undefined,
-      ...(hasTrip ? { whatif_start: tripStart, whatif_end: tripEnd, whatif_type: tripType } : {}),
+      ...(hasTrip ? { whatif_start: tripStart, whatif_end: tripEnd, whatif_type: booking } : {}),
       include_planned: includePlanned,
     }),
-    [target, hasTrip, tripStart, tripEnd, tripType, includePlanned],
+    [target, hasTrip, tripStart, tripEnd, booking, includePlanned],
   );
   const [params, setParams] = useState(draft);
   useEffect(() => {
@@ -229,7 +231,7 @@ export function Projection() {
       api.createUsage({
         start: tripStart,
         end: tripEnd,
-        type: tripType,
+        type: booking,
         reason: tripName,
         requested: false,
       }),
@@ -323,6 +325,12 @@ export function Projection() {
                     <span className="font-display font-bold text-ink">
                       {tripDays.days} workday{tripDays.days === 1 ? "" : "s"} · {fmtG(tripDays.hours)} h
                     </span>
+                    {tripDays.type === "ph_first" && (
+                      <>
+                        <br />
+                        {fmtG(tripDays.ph_hours)} h PH + {fmtG(tripDays.pto_hours)} h PTO
+                      </>
+                    )}
                     {tripDays.skipped_holidays.length > 0 && (
                       <>
                         <br />
@@ -338,6 +346,17 @@ export function Projection() {
                 )}
               </div>
             </div>
+            {tripType === "pto" && (
+              <label className="flex min-h-9 items-center gap-2.5 text-[13.5px] text-ink-2">
+                <input
+                  type="checkbox"
+                  className="h-[18px] w-[18px] accent-primary"
+                  checked={phFirst}
+                  onChange={(e) => setPhFirst(e.target.checked)}
+                />
+                <span>Use personal holidays first, then PTO</span>
+              </label>
+            )}
             {hasTrip && (
               <Field label="Name (for saving)">
                 <input

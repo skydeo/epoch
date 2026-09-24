@@ -469,3 +469,18 @@ def test_import_confirm_replace_then_merge(client):
     resp = client.post("/api/import/confirm", json={"csv_text": _CSV, "mode": "merge"})
     assert resp.json() == {"imported": 0, "skipped": 2, "mode": "merge"}
     assert len(_all_entries()) == 2
+
+
+def test_usage_create_ph_first(client):
+    """A PH-first range spends the year's 16 h PH on the first two days."""
+    resp = client.post(
+        "/api/usage",
+        json={"start": "2026-07-13", "end": "2026-07-15", "type": "ph_first", "reason": "Trip"},
+    )
+    assert resp.status_code == 201
+    created = sorted(resp.json()["created"], key=lambda e: e["date"])
+    assert [(e["date"], e["type"]) for e in created] == [
+        ("2026-07-13", "personal_holiday"),
+        ("2026-07-14", "personal_holiday"),
+        ("2026-07-15", "pto"),
+    ]

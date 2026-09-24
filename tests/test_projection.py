@@ -128,3 +128,23 @@ def test_exclude_planned_drops_future_usage(client):
     assert off["snap"]["pto_balance"] >= on["snap"]["pto_balance"]
     assert any("hasn't been requested" in w for w in on["warnings"])
     assert not any("hasn't been requested" in w for w in off["warnings"])
+
+
+def test_whatif_ph_first_spends_personal_holiday_then_pto(client):
+    # 8 h of 2023's 16 h PH already used → the trip gets 8 h PH, then PTO.
+    with get_session() as session:
+        session.add(UsageEntry(date=date(2023, 3, 1), hours=8, type=UsageType.personal_holiday))
+        session.commit()
+    data = client.get(
+        "/api/projection",
+        params={
+            "date": "2023-06-30",
+            "whatif_start": "2023-06-05",
+            "whatif_end": "2023-06-07",
+            "whatif_type": "ph_first",
+        },
+    ).json()
+    assert data["whatif"]["ph_hours"] == 8.0
+    assert data["whatif"]["pto_hours"] == 16.0
+    assert data["snap"]["ph_remaining"] == 0.0
+    assert data["snap"]["pto_balance"] == round(data["baseline_balance"] - 16.0, 2)
