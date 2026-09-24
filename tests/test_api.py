@@ -484,3 +484,11 @@ def test_usage_create_ph_first(client):
         ("2026-07-14", "personal_holiday"),
         ("2026-07-15", "pto"),
     ]
+
+
+def test_usage_filter_multiple_years_keeps_full_year_list(client):
+    for start in ("2024-03-04", "2025-03-03", "2026-03-02"):
+        client.post("/api/usage", json={"start": start, "end": start, "type": "pto"})
+    data = client.get("/api/usage", params=[("year", 2024), ("year", 2026)]).json()
+    assert sorted({r["date"][:4] for r in data["rows"]}) == ["2024", "2026"]
+    assert data["years"] == [2024, 2025, 2026]  # unfiltered, so the picker keeps 2025

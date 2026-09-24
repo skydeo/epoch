@@ -67,10 +67,14 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
-function qs(params: Record<string, string | number | undefined>): string {
+function qs(
+  params: Record<string, string | number | (string | number)[] | undefined>,
+): string {
   const usp = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
-    if (v !== undefined && v !== "") usp.set(k, String(v));
+    // Arrays repeat the key (?year=2025&year=2026), as FastAPI list params expect.
+    if (Array.isArray(v)) v.forEach((item) => usp.append(k, String(item)));
+    else if (v !== undefined && v !== "") usp.set(k, String(v));
   }
   const s = usp.toString();
   return s ? `?${s}` : "";
@@ -83,7 +87,8 @@ export interface ChartParams {
 
 export interface UsageFilters {
   type?: string;
-  year?: number;
+  /** Any of these calendar years; empty/undefined = all years. */
+  years?: number[];
   requested?: boolean;
 }
 
@@ -99,7 +104,7 @@ export const api = {
     apiFetch<UsageResponse>(
       `/api/usage${qs({
         type: filters.type,
-        year: filters.year,
+        year: filters.years,
         requested:
           filters.requested === undefined ? undefined : String(filters.requested),
       })}`,

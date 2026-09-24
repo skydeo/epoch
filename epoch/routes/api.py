@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from fastapi import APIRouter, File, HTTPException, Request, Response, UploadFile, status
+from fastapi import APIRouter, File, HTTPException, Query, Request, Response, UploadFile, status
 from fastapi.responses import JSONResponse
 from sqlmodel import select
 
@@ -166,25 +166,31 @@ async def accruals(year: int | None = None) -> dict:
 @router.get("/usage")
 async def usage_list(
     type: str | None = None,  # noqa: A002 - query field name
-    year: int | None = None,
+    year: list[int] | None = Query(None),
     requested: bool | None = None,
 ) -> dict:
-    """Filtered usage log (by type / year / requested) plus form context."""
+    """Filtered usage log (by type / year / requested) plus form context.
+
+    ``year`` repeats for several years (``?year=2025&year=2026``). ``years`` in
+    the response lists every year with usage, *before* filtering, so the
+    client's year picker never shrinks to the current selection.
+    """
     with get_session() as session:
         cfg = load_engine_config(session)
         entries = list(session.exec(select(UsageEntry)).all())
         holidays = {h.date for h in session.exec(select(CompanyHoliday)).all()}
 
+    all_years = sorted({e.date.year for e in entries})
     if type:
         wanted = usage_type(type)
         entries = [e for e in entries if e.type == wanted]
-    if year is not None:
-        entries = [e for e in entries if e.date.year == year]
+    if year:
+        wanted_years = set(year)
+        entries = [e for e in entries if e.date.year in wanted_years]
     if requested is not None:
         entries = [e for e in entries if e.requested == requested]
 
     entries.sort(key=lambda e: (e.date, e.id or 0))
-    all_years = sorted({e.date.year for e in entries})
     # Trips are grouped from the SAME filtered row set — a year/requested
     # filter can therefore split what would otherwise be one trip.
     return {

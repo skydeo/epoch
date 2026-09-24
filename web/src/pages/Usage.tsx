@@ -47,7 +47,11 @@ export function Usage() {
 
   // --- Filters drive the query params (HANDOFF §7) ---
   const [type, setType] = useState<"" | UsageTypeValue>("");
-  const [yearFilter, setYearFilter] = useState<"" | number>("");
+  const [yearFilter, setYearFilter] = useState<number[]>([]);
+  const toggleYear = (y: number) =>
+    setYearFilter((ys) =>
+      ys.includes(y) ? ys.filter((v) => v !== y) : [...ys, y].sort((a, b) => a - b),
+    );
   const [requested, setRequested] = useState<"" | "true" | "false">("");
   // Newest first by default (current data at the top): days by date, trips by
   // start date.
@@ -56,7 +60,7 @@ export function Usage() {
   const filters: UsageFilters = useMemo(
     () => ({
       type: type || undefined,
-      year: yearFilter === "" ? undefined : yearFilter,
+      years: yearFilter.length ? yearFilter : undefined,
       requested: requested === "" ? undefined : requested === "true",
     }),
     [type, yearFilter, requested],
@@ -65,6 +69,8 @@ export function Usage() {
   const query = useQuery({
     queryKey: queryKeys.usage(filters as Record<string, unknown>),
     queryFn: () => api.usage(filters),
+    // Keep the old list (and the year picker) on screen while a new filter loads.
+    placeholderData: (prev) => prev,
   });
 
   // Rows arrive ascending by (date, id); flip for descending.
@@ -541,7 +547,7 @@ export function Usage() {
   const ptoHours = allRows.filter((r) => r.type === "pto").reduce((n, r) => n + r.hours, 0);
   const phHours = allRows.filter((r) => r.type !== "pto").reduce((n, r) => n + r.hours, 0);
   const activeFilters =
-    (type ? 1 : 0) + (yearFilter !== "" ? 1 : 0) + (requested ? 1 : 0);
+    (type ? 1 : 0) + yearFilter.length + (requested ? 1 : 0);
 
   const confirmTripDelete = (t: Trip) => {
     if (
@@ -915,22 +921,35 @@ export function Usage() {
             <option value="personal_holiday">Personal Holiday</option>
           </select>
         </Field>
-        <Field label="Year">
-          <select
-            className={inputCls}
-            value={yearFilter}
-            onChange={(e) =>
-              setYearFilter(e.target.value === "" ? "" : Number(e.target.value))
-            }
-          >
-            <option value="">All</option>
-            {(query.data?.years ?? []).map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </select>
-        </Field>
+        <fieldset className="col-span-2 flex flex-col gap-1.5 text-xs font-semibold text-ink-2 min-[900px]:order-last min-[900px]:basis-full">
+          <legend className="mb-1.5">Years</legend>
+          <div className="flex flex-wrap gap-1.5">
+            {(query.data?.years ?? []).map((y) => {
+              const on = yearFilter.includes(y);
+              return (
+                <button
+                  key={y}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => toggleYear(y)}
+                  className={[
+                    "h-9 rounded-pill border px-3.5 font-display text-[13.5px] font-semibold",
+                    on
+                      ? "border-primary bg-primary-soft text-primary"
+                      : "border-line bg-surface text-ink-2 hover:border-line-strong",
+                  ].join(" ")}
+                >
+                  {y}
+                </button>
+              );
+            })}
+            {yearFilter.length === 0 && (
+              <span className="self-center pl-1 text-[12px] font-medium text-ink-3">
+                all years — tap to pick one or more
+              </span>
+            )}
+          </div>
+        </fieldset>
         <Field label="Requested">
           <select
             className={inputCls}
@@ -953,22 +972,36 @@ export function Usage() {
             Date {sortDir === "asc" ? "↑" : "↓"}
           </Button>
         </div>
+        {activeFilters > 0 && (
+          <div className="hidden items-end min-[900px]:flex">
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setType("");
+                setYearFilter([]);
+                setRequested("");
+              }}
+            >
+              Clear filters ⓧ
+            </Button>
+          </div>
+        )}
       </div>
       )}
 
       {/* Active filters as removable chips — always visible, so a filter is
           never "stuck" behind a collapsed panel. */}
       {activeFilters > 0 && (
-        <div className="mb-3 flex flex-wrap items-center gap-1.5">
+        <div className="mb-3 flex flex-wrap items-center gap-1.5 min-[900px]:hidden">
           {type && (
             <FilterChip
               label={type === "pto" ? "PTO" : "Personal holiday"}
               onClear={() => setType("")}
             />
           )}
-          {yearFilter !== "" && (
-            <FilterChip label={String(yearFilter)} onClear={() => setYearFilter("")} />
-          )}
+          {yearFilter.map((y) => (
+            <FilterChip key={y} label={String(y)} onClear={() => toggleYear(y)} />
+          ))}
           {requested && (
             <FilterChip
               label={requested === "true" ? "Requested" : "Not requested"}
@@ -980,7 +1013,7 @@ export function Usage() {
               type="button"
               onClick={() => {
                 setType("");
-                setYearFilter("");
+                setYearFilter([]);
                 setRequested("");
               }}
               className="h-8 px-2 text-[13px] font-semibold text-primary"
