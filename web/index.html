@@ -2,23 +2,32 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0c1728" media="(prefers-color-scheme: dark)" />
+    <meta name="apple-mobile-web-app-title" content="epoch" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <title>epoch — PTO Tracker</title>
-    <!-- Pre-paint theme: read the persisted choice and stamp data-theme on
-         <html> BEFORE first paint so there is no light/dark flash (HANDOFF §3). -->
+    <!-- Pre-paint theme: an explicit light/dark choice wins; otherwise follow
+         the OS. Stamps data-theme on <html> BEFORE first paint so there is no
+         flash. lib/theme.tsx applies the same rules (and tracks OS changes). -->
     <script>
       (function () {
+        var t = null;
         try {
-          var t = localStorage.getItem("epoch-theme");
-          if (t !== "dark" && t !== "light") {
-            t = window.matchMedia("(prefers-color-scheme: dark)").matches
+          t = localStorage.getItem("epoch-theme");
+        } catch (e) {}
+        if (t !== "dark" && t !== "light") {
+          t =
+            window.matchMedia &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches
               ? "dark"
               : "light";
-          }
-          document.documentElement.setAttribute("data-theme", t);
-        } catch (e) {
-          document.documentElement.setAttribute("data-theme", "light");
         }
+        document.documentElement.setAttribute("data-theme", t);
       })();
     </script>
   </head>

@@ -20,11 +20,14 @@ from epoch.domain import expand_range, load_engine_config
 from epoch.engine import (
     EngineConfig,
     PeriodRow,
+    UsageItem,
     accrual_rate,
     balance_on,
     compute_ledger,
+    contains_jan1,
     loss_warnings,
     period_bounds,
+    period_index_for,
 )
 from epoch.models import AccrualTier, AppSetting, CompanyHoliday, UsageEntry, UsageType
 
@@ -75,7 +78,16 @@ def dashboard_stats(cfg: EngineConfig, usage, on: date) -> dict:
         if cfg.max_balance_hours
         else 0.0
     )
-    pto_used_ytd = round(sum(r.pto_used for r in ledger if r.end.year == on.year), 2)
+    # By each entry's own date (not its period's end year) so a late-December
+    # day off never counts toward the next year — same rule as yearly_stats.
+    pto_used_ytd = round(
+        sum(
+            u.hours
+            for u in usage
+            if not u.is_ph and u.date.year == on.year and u.date <= on
+        ),
+        2,
+    )
 
     # Next pay: earliest period (from the current one onward) whose pay date
     # has not yet passed.
@@ -138,6 +150,93 @@ def projection_snapshot(cfg: EngineConfig, usage, on: date, target: date) -> dic
         "target": target,
         "today": on,
         "is_future": target > on,
+    }
+
+
+def whatif_days(
+    start: date, end: date, holidays: set[date]
+) -> tuple[list[date], list[date]]:
+    """Working days of a hypothetical trip, plus the weekday holidays it skips."""
+    days = expand_range(start, end, holidays)
+    skipped = sorted(
+        h for h in holidays if start <= h <= end and h.weekday() < 5
+    )
+    return days, skipped
+
+
+def projection_plan(
+    cfg: EngineConfig,
+    usage: list[UsageItem],
+    on: date,
+    target: date,
+    *,
+    extra: list[UsageItem] | None = None,
+    include_planned: bool = True,
+) -> dict:
+    """The Planner: where the balance lands on ``target``, with and without a
+    hypothetical trip (``extra``, never persisted).
+
+    ``include_planned=False`` drops every already-entered future day (date >
+    ``on``) from both scenarios, answering "what if I cancelled everything
+    planned?". The returned ``snap`` / ``warnings`` / period bounds describe
+    the *scenario* (baseline + ``extra``) so the response stays compatible with
+    the original projection contract.
+    """
+    base = usage if include_planned else [u for u in usage if u.date <= on]
+    extra = extra or []
+    scenario = base + extra
+
+    result = projection_snapshot(cfg, scenario, on, target)
+    base_snap = balance_on(cfg, base, target)
+
+    # Period-by-period series from the current period through the target's,
+    # both scenarios folded over the same span.
+    lo, hi = min(on, target), max(on, target)
+    base_rows = compute_ledger(cfg, base, hi)
+    scen_rows = compute_ledger(cfg, scenario, hi)
+    first = period_index_for(cfg, lo)
+    series = [
+        {
+            "end": s.end.isoformat(),
+            "baseline": b.balance,
+            "scenario": s.balance,
+        }
+        for b, s in zip(base_rows, scen_rows)
+        if s.index >= first
+    ]
+    span = [r for r in scen_rows if r.index >= first]
+    lowest = min(span, key=lambda r: r.balance) if span else None
+
+    # The first Jan 1 after today: what that rollover would forfeit, i.e. how
+    # many more hours would need using by Dec 31 to lose nothing.
+    next_jan1 = date(on.year + 1, 1, 1)
+    roll_rows = compute_ledger(cfg, scenario, next_jan1)
+    roll_row = next(
+        (r for r in reversed(roll_rows) if contains_jan1(r.start, r.end)), None
+    )
+    rollover_lost = roll_row.lost_to_rollover if roll_row else 0.0
+
+    planned = [u for u in usage if u.date > on and not u.is_ph]
+    snap = result["snap"]
+    return {
+        **result,
+        "baseline_balance": base_snap.pto_balance,
+        "baseline_ph_remaining": base_snap.ph_remaining,
+        "headroom": round(cfg.max_balance_hours - snap.pto_balance, 2),
+        "cap": cfg.max_balance_hours,
+        "rollover_limit": cfg.rollover_hours,
+        "rollover": {
+            "date": next_jan1,
+            "lost": rollover_lost,
+            "applies": target >= next_jan1,
+        },
+        "lowest": (
+            {"balance": lowest.balance, "end": lowest.end} if lowest else None
+        ),
+        "series": series,
+        "planned_hours": round(sum(u.hours for u in planned), 2),
+        "include_planned": include_planned,
+        "hours_per_day": cfg.hours_per_day,
     }
 
 

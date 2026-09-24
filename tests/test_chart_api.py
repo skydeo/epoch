@@ -134,9 +134,15 @@ def test_stats_shape(client):
         "year",
         "accrued",
         "pto_used",
+        "pto_taken",
+        "pto_planned",
         "ph_used",
+        "ph_granted",
+        "ph_remaining",
         "lost_to_cap",
         "lost_to_rollover",
+        "end_balance",
+        "partial",
     }
     # 2026 must show the PTO/PH we seeded.
     by_year = {r["year"]: r for r in data["years"]}

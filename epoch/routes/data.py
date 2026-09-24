@@ -13,6 +13,7 @@ from datetime import date
 
 from fastapi import APIRouter
 
+from epoch import services
 from epoch.db import get_session
 from epoch.domain import load_engine_config, load_usage
 from epoch.engine import (
@@ -36,7 +37,7 @@ async def chart_data(start: str | None = None, end: str | None = None) -> dict:
     window excludes today. The optional ``start`` / ``end`` (ISO dates) clip the
     window to periods whose *start* falls in ``[start, end]``.
     """
-    today = date.today()
+    today = services.today()
     with get_session() as session:
         cfg = load_engine_config(session)
         usage = load_usage(session)
@@ -89,24 +90,35 @@ async def chart_data(start: str | None = None, end: str | None = None) -> dict:
 
 @router.get("/stats")
 async def stats_data() -> dict:
-    """Per-calendar-year totals: accrued, PTO used, PH used, lost to cap/rollover."""
-    today = date.today()
+    """Per-calendar-year totals (see ``engine.yearly_stats`` for attribution).
+
+    Folded through the later of the projection horizon and the end of the
+    current year, so this year's row always carries a full year-end estimate.
+    """
+    today = services.today()
     with get_session() as session:
         cfg = load_engine_config(session)
         usage = load_usage(session)
 
-    through = max(today, horizon(cfg, today))
-    years = yearly_stats(cfg, usage, through)
+    through = max(date(today.year, 12, 31), horizon(cfg, today))
+    years = yearly_stats(cfg, usage, through, today=today)
     return {
+        "today": today.isoformat(),
         "years": [
             {
                 "year": y.year,
                 "accrued": y.accrued,
                 "pto_used": y.pto_used,
+                "pto_taken": y.pto_taken,
+                "pto_planned": y.pto_planned,
                 "ph_used": y.ph_used,
+                "ph_granted": y.ph_granted,
+                "ph_remaining": y.ph_remaining,
                 "lost_to_cap": y.lost_to_cap,
                 "lost_to_rollover": y.lost_to_rollover,
+                "end_balance": y.end_balance,
+                "partial": y.partial,
             }
             for y in years
-        ]
+        ],
     }

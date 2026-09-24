@@ -269,3 +269,68 @@ def test_yearly_stats_rollup(cfg):
     assert 2026 in stats
     assert stats[2026].pto_used == 8.0
     assert stats[2026].ph_used == 8.0
+
+
+# --------------------------------------------------------------------------- #
+# Year-boundary attribution
+# --------------------------------------------------------------------------- #
+
+
+def test_rollover_fires_for_a_period_starting_on_jan_1(cfg):
+    # 2029-01-01 is exactly a period start for the default hire date, so no
+    # period *straddles* Jan 1 that year — the rollover must still apply.
+    rows = compute_ledger(cfg, [], date(2029, 1, 10))
+    jan = next(r for r in rows if r.start == date(2029, 1, 1))
+    assert jan.lost_to_rollover > 0
+    dec = next(r for r in rows if r.end == date(2028, 12, 31))
+    assert dec.lost_to_rollover == 0
+    # Exactly one rollover per calendar year.
+    rolls = [r.start.year for r in rows if r.lost_to_rollover > 0]
+    assert len(rolls) == len(set(r.end.year for r in rows if r.lost_to_rollover > 0))
+
+
+def test_yearly_stats_counts_late_december_usage_in_its_own_year(cfg):
+    # Dec 29, 2025 sits in the period 2025-12-22..2026-01-04 (ends in 2026).
+    usage = [
+        UsageItem(date(2025, 12, 29), 8.0),
+        UsageItem(date(2025, 12, 30), 8.0, is_ph=True),
+    ]
+    stats = {s.year: s for s in yearly_stats(cfg, usage, date(2026, 12, 31))}
+    assert stats[2025].pto_used == 8.0
+    assert stats[2025].ph_used == 8.0
+    assert stats[2026].pto_used == 0.0
+    assert stats[2026].ph_used == 0.0
+
+
+def test_yearly_stats_rollover_loss_belongs_to_the_year_that_ended(cfg):
+    stats = {s.year: s for s in yearly_stats(cfg, [], date(2027, 3, 1))}
+    assert stats[2026].lost_to_rollover > 0  # forfeited at Jan 1, 2027
+    assert stats[2027].lost_to_rollover == 0
+
+
+def test_yearly_stats_splits_taken_and_planned(cfg):
+    usage = [UsageItem(date(2026, 3, 3), 8.0), UsageItem(date(2026, 11, 25), 24.0)]
+    stats = {
+        s.year: s
+        for s in yearly_stats(cfg, usage, date(2026, 12, 31), today=date(2026, 9, 23))
+    }
+    assert stats[2026].pto_taken == 8.0
+    assert stats[2026].pto_planned == 24.0
+    assert stats[2026].pto_used == 32.0
+
+
+def test_yearly_stats_flags_partial_years(cfg):
+    stats = {s.year: s for s in yearly_stats(cfg, [], date(2027, 3, 1))}
+    assert stats[2023].partial  # hired Jan 9
+    assert not stats[2025].partial
+    assert stats[2027].partial  # cut off by `through`
+
+
+def test_yearly_stats_ph_remaining_and_end_balance(cfg):
+    usage = [UsageItem(date(2026, 3, 2), 8.0, is_ph=True)]
+    stats = {s.year: s for s in yearly_stats(cfg, usage, date(2026, 12, 31))}
+    assert stats[2026].ph_granted == 16.0
+    assert stats[2026].ph_remaining == 8.0
+    rows = compute_ledger(cfg, usage, date(2026, 12, 31))
+    last_2026 = [r for r in rows if r.end.year == 2026][-1]
+    assert stats[2026].end_balance == last_2026.balance

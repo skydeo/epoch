@@ -25,6 +25,7 @@ from epoch.domain import load_engine_config, load_usage
 from epoch.engine import (
     BalanceSnapshot,
     PeriodRow,
+    UsageItem,
     compute_ledger,
     period_index_for,
 )
@@ -44,7 +45,7 @@ from epoch.services import (
     load_settings,
     load_tiers,
     persist_settings,
-    projection_snapshot,
+    projection_plan,
     remove_holiday,
     remove_tier,
     row_state,
@@ -53,6 +54,7 @@ from epoch.services import (
     usage_entry_json,
     usage_type,
     validate_settings,
+    whatif_days,
 )
 
 router = APIRouter(prefix="/api", tags=["api"])
@@ -302,49 +304,124 @@ async def usage_delete(entry_id: int) -> Response:
 # --------------------------------------------------------------------------- #
 
 
-@router.get("/projection")
-async def projection(date: str | None = None) -> dict:  # noqa: A002 - query name
-    """Balance snapshot for ``?date=`` (default today).
+def _parse_query_date(value: str, label: str):
+    try:
+        return date_from_iso(value)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": f"{label} {value!r} is not a valid date."},
+        ) from None
 
-    400 ``{error}`` for an unparseable date or one before the hire date.
+
+@router.get("/projection")
+async def projection(
+    date: str | None = None,  # noqa: A002 - query name
+    whatif_start: str | None = None,
+    whatif_end: str | None = None,
+    whatif_type: str = "pto",
+    include_planned: bool = True,
+) -> dict:
+    """The Planner: balance on ``?date=`` (default today), optionally with a
+    hypothetical ``whatif_start``..``whatif_end`` trip that is never saved.
+
+    400 ``{error}`` for an unparseable date, one before the hire date, or a
+    what-if range that is inverted / pre-hire.
     """
     on = today()
     with get_session() as session:
         cfg = load_engine_config(session)
         usage = load_usage(session)
+        holidays = {h.date for h in session.exec(select(CompanyHoliday)).all()}
+        unrequested = [
+            e
+            for e in session.exec(select(UsageEntry)).all()
+            if e.date > on and not e.requested
+        ]
 
-    if date is None:
-        target = on
-    else:
-        try:
-            target = date_from_iso(date)
-        except ValueError:
+    target = on if date is None else _parse_query_date(date, "Date")
+    if target < cfg.hire_date:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": (
+                    f"Date {target.isoformat()} precedes the hire date "
+                    f"{cfg.hire_date.isoformat()} — no pay period exists."
+                )
+            },
+        )
+
+    whatif = None
+    extra: list[UsageItem] = []
+    if whatif_start and whatif_end:
+        w_start = _parse_query_date(whatif_start, "Trip start")
+        w_end = _parse_query_date(whatif_end, "Trip end")
+        if w_end < w_start:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail={"error": f"{date!r} is not a valid date."},
-            ) from None
-        if target < cfg.hire_date:
+                detail={"error": "The trip ends before it starts."},
+            )
+        if w_start < cfg.hire_date:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "error": (
-                        f"Date {target.isoformat()} precedes the hire date "
-                        f"{cfg.hire_date.isoformat()} — no pay period exists."
-                    )
-                },
+                detail={"error": "The trip starts before the hire date."},
+            )
+        is_ph = usage_type(whatif_type).value == "personal_holiday"
+        days, skipped = whatif_days(w_start, w_end, holidays)
+        extra = [UsageItem(date=d, hours=cfg.hours_per_day, is_ph=is_ph) for d in days]
+        whatif = {
+            "start": w_start.isoformat(),
+            "end": w_end.isoformat(),
+            "type": "personal_holiday" if is_ph else "pto",
+            "days": len(days),
+            "hours": round(len(days) * cfg.hours_per_day, 2),
+            "skipped_holidays": [d.isoformat() for d in skipped],
+        }
+
+    result = projection_plan(
+        cfg, usage, on, target, extra=extra, include_planned=include_planned
+    )
+    warnings = list(result["warnings"])
+    if include_planned:
+        for trip in group_trips(unrequested, holidays):
+            name = trip["reason"] or "A planned trip"
+            warnings.append(
+                f"{name} ({trip['total_hours']:g} h, planned) hasn't been "
+                "requested yet."
             )
 
-    result = projection_snapshot(cfg, usage, on, target)
     return {
         "snap": _snapshot_json(result["snap"]),
         "period_start": result["period_start"].isoformat(),
         "period_end": result["period_end"].isoformat(),
         "period_pay": result["period_pay"].isoformat(),
         "balance_negative": result["balance_negative"],
-        "warnings": list(result["warnings"]),
+        "warnings": warnings,
         "target": result["target"].isoformat(),
         "today": result["today"].isoformat(),
         "is_future": result["is_future"],
+        "baseline_balance": result["baseline_balance"],
+        "baseline_ph_remaining": result["baseline_ph_remaining"],
+        "headroom": result["headroom"],
+        "cap": result["cap"],
+        "rollover_limit": result["rollover_limit"],
+        "rollover": {
+            **result["rollover"],
+            "date": result["rollover"]["date"].isoformat(),
+        },
+        "lowest": (
+            {
+                "balance": result["lowest"]["balance"],
+                "end": result["lowest"]["end"].isoformat(),
+            }
+            if result["lowest"]
+            else None
+        ),
+        "series": result["series"],
+        "planned_hours": result["planned_hours"],
+        "include_planned": include_planned,
+        "hours_per_day": cfg.hours_per_day,
+        "whatif": whatif,
     }
 
 

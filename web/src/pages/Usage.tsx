@@ -3,10 +3,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { PageHeader } from "../components/PageHeader";
 import { DataTable, type Column } from "../components/DataTable";
+import { RowMenu } from "../components/RowMenu";
 import { SegmentedControl } from "../components/SegmentedControl";
 import { Badge, Button, Field, inputCls } from "../components/ui";
 import { EmptyState, ErrorState, Spinner } from "../components/states";
 import { ApiError, api, queryKeys, type UsageFilters } from "../lib/api";
+import { fmtRange, parseIso, todayIso } from "../lib/date";
+import { useIsMobile } from "../lib/useMediaQuery";
 import { fmtG } from "../lib/format";
 import type { Trip, UsageEntry, UsageResponse, UsageTypeValue } from "../types";
 
@@ -14,7 +17,6 @@ const editInputCls =
   "rounded-field border border-line bg-bg-elev px-2 py-1.5 text-[13px] text-ink " +
   "outline-none w-full min-w-0 focus-visible:ring-2 focus-visible:ring-primary";
 
-const todayIso = () => new Date().toISOString().slice(0, 10);
 
 // The usage list lives under the "usage" query-key prefix (one cache entry per
 // filter combo). Optimistic mutations update every matching entry at once.
@@ -35,6 +37,10 @@ const DAY_GRID = "110px 64px 140px minmax(120px,1fr) 96px 150px";
 
 export function Usage() {
   const qc = useQueryClient();
+  const isMobile = useIsMobile();
+  // Mobile keeps the add form and filters folded away until asked for.
+  const [addOpen, setAddOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   // Trips | Days — trips is the default mental model (a range is one trip).
   const [view, setView] = useState<"trips" | "days">("trips");
@@ -85,6 +91,8 @@ export function Usage() {
     qc.invalidateQueries({ queryKey: ["dashboard"] });
     qc.invalidateQueries({ queryKey: ["chart"] });
     qc.invalidateQueries({ queryKey: ["accruals"] });
+    qc.invalidateQueries({ queryKey: ["stats"] });
+    qc.invalidateQueries({ queryKey: ["projection"] });
   };
 
   const snapshot = () => qc.getQueriesData<UsageResponse>(USAGE_ROOT);
@@ -118,7 +126,10 @@ export function Usage() {
       return { prev };
     },
     onError: (_e, _v, ctx) => restore(ctx?.prev),
-    onSettled: () => qc.invalidateQueries(USAGE_ROOT),
+    onSettled: () => {
+      qc.invalidateQueries(USAGE_ROOT);
+      qc.invalidateQueries({ queryKey: ["projection"] });
+    },
   });
 
   // --- Delete one day (optimistic) ---
@@ -180,7 +191,10 @@ export function Usage() {
       return { prev };
     },
     onError: (_e, _v, ctx) => restore(ctx?.prev),
-    onSettled: () => qc.invalidateQueries(USAGE_ROOT),
+    onSettled: () => {
+      qc.invalidateQueries(USAGE_ROOT);
+      qc.invalidateQueries({ queryKey: ["projection"] });
+    },
   });
 
   // --- Delete a whole trip (bulk delete, optimistic) ---
@@ -219,6 +233,7 @@ export function Usage() {
       );
       // A new range is a new trip — land the user where they can see it.
       setView("trips");
+      setAddOpen(false);
     },
     onSettled: () => {
       qc.invalidateQueries(USAGE_ROOT);
@@ -519,6 +534,231 @@ export function Usage() {
     return inTrip.sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
   };
 
+  const today = todayIso();
+  const upcomingTrips = trips.filter((t) => t.end >= today);
+  const pastTrips = trips.filter((t) => t.end < today);
+  const allRows = query.data?.rows ?? [];
+  const ptoHours = allRows.filter((r) => r.type === "pto").reduce((n, r) => n + r.hours, 0);
+  const phHours = allRows.filter((r) => r.type !== "pto").reduce((n, r) => n + r.hours, 0);
+  const activeFilters =
+    (type ? 1 : 0) + (yearFilter !== "" ? 1 : 0) + (requested ? 1 : 0);
+
+  const confirmTripDelete = (t: Trip) => {
+    if (
+      window.confirm(
+        `Delete this trip (${t.day_count} day${t.day_count === 1 ? "" : "s"}, ${fmtRange(t.start, t.end)})?`,
+      )
+    )
+      tripDelete.mutate(t.ids);
+  };
+
+  const mobileTripRow = (t: Trip) => {
+    const key = tripKey(t);
+    const isPh = t.type === "personal_holiday";
+    const allRequested = t.requested === "all";
+    return (
+      <div className="flex items-center gap-1 py-1 pl-3">
+        <button
+          type="button"
+          onClick={() => toggleExpanded(key)}
+          aria-expanded={expanded.has(key)}
+          className="flex min-w-0 flex-1 flex-col gap-0.5 py-1 text-left"
+        >
+          <span className="flex items-center gap-[7px]">
+            <span
+              className="h-[9px] w-[9px] flex-none rounded-full"
+              style={{ background: isPh ? "var(--warn)" : "var(--danger)" }}
+            />
+            <span className="truncate text-[15px] font-semibold text-ink">
+              {t.reason || (isPh ? "Personal holiday" : "PTO")}
+            </span>
+            {isPh && t.reason && (
+              <Badge color="var(--warn)" bg="var(--warn-soft)" className="text-[11px]">
+                PH
+              </Badge>
+            )}
+            <span className="flex-1" />
+            <span className="font-display text-[16px] font-bold tabular-nums text-ink">
+              {fmtG(t.total_hours)}
+              <span className="text-[11.5px] font-medium text-ink-3"> h</span>
+            </span>
+          </span>
+          <span className="flex items-center gap-1.5 text-[12.5px] text-ink-3">
+            <span className="truncate">
+              {fmtRange(t.start, t.end)}
+              {t.start.slice(0, 4) !== today.slice(0, 4) && `, ${t.start.slice(0, 4)}`} · {t.day_count}{" "}
+              {t.day_count === 1 ? "day" : "days"}
+            </span>
+            <span className="flex-1" />
+            <TripRequestedBadge trip={t} />
+          </span>
+        </button>
+        <RowMenu
+          label="Trip actions"
+          items={[
+            {
+              label: allRequested ? "Mark not requested" : "Mark requested",
+              onSelect: () => bulkToggle.mutate({ ids: t.ids, requested: !allRequested }),
+            },
+            {
+              label: expanded.has(key) ? "Hide days" : "Show days",
+              onSelect: () => toggleExpanded(key),
+            },
+            { label: "Delete trip", danger: true, onSelect: () => confirmTripDelete(t) },
+          ]}
+        />
+      </div>
+    );
+  };
+
+  // One day, phone-sized. `inTrip` drops the type/reason already on the trip.
+  const mobileDayRow = (r: UsageEntry, inTrip = false) => {
+    if (editingId === r.id && draft)
+      return (
+        <div className="grid grid-cols-2 gap-2 px-3 py-2.5">
+          <input
+            type="date"
+            aria-label="Date"
+            className={editInputCls}
+            value={draft.date}
+            onChange={(e) => setDraft((d) => d && { ...d, date: e.target.value })}
+          />
+          <input
+            type="number"
+            step="0.5"
+            aria-label="Hours"
+            className={editInputCls}
+            value={draft.hours}
+            onChange={(e) => setDraft((d) => d && { ...d, hours: e.target.value })}
+          />
+          <select
+            aria-label="Type"
+            className={editInputCls}
+            value={draft.type}
+            onChange={(e) =>
+              setDraft((d) => d && { ...d, type: e.target.value as UsageTypeValue })
+            }
+          >
+            <option value="pto">PTO</option>
+            <option value="personal_holiday">Personal Holiday</option>
+          </select>
+          <input
+            type="text"
+            aria-label="Reason"
+            placeholder="reason"
+            className={editInputCls}
+            value={draft.reason}
+            onChange={(e) => setDraft((d) => d && { ...d, reason: e.target.value })}
+          />
+          <div className="col-span-2 flex gap-2">
+            <Button variant="primary" onClick={() => saveEdit(r.id)}>
+              Save
+            </Button>
+            <Button variant="ghost" onClick={cancelEdit}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      );
+    const isPh = r.type === "personal_holiday";
+    const date = parseIso(r.date).toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      ...(inTrip ? {} : { year: "numeric" }),
+    });
+    return (
+      <div className={["flex items-center gap-2", inTrip ? "pl-7 pr-0" : "pl-3"].join(" ")}>
+        {!inTrip && (
+          <span
+            className="h-[9px] w-[9px] flex-none rounded-full"
+            style={{ background: isPh ? "var(--warn)" : "var(--danger)" }}
+          />
+        )}
+        <span className="min-w-0 flex-1 truncate text-[13.5px]">
+          <span className="font-display font-medium text-ink">{date}</span>
+          {!inTrip && r.reason && <span className="text-ink-3"> · {r.reason}</span>}
+        </span>
+        <span className="font-display text-[14px] font-semibold tabular-nums">
+          {fmtG(r.hours)} h
+        </span>
+        <button
+          type="button"
+          onClick={() => toggle.mutate({ id: r.id, requested: !r.requested })}
+          aria-pressed={r.requested}
+          aria-label={r.requested ? "Requested — tap to unmark" : "Not requested — tap to mark"}
+          className="flex h-9 w-9 items-center justify-center"
+        >
+          <span
+            className="flex h-[22px] w-[22px] items-center justify-center rounded-full border"
+            style={{
+              borderColor: r.requested ? "var(--mint)" : "var(--border-strong)",
+              background: r.requested ? "var(--teal-soft)" : "transparent",
+              color: "var(--mint)",
+            }}
+          >
+            {r.requested && (
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M5 12l5 5 9-10" />
+              </svg>
+            )}
+          </span>
+        </button>
+        <RowMenu
+          label="Day actions"
+          items={[
+            { label: "Edit", onSelect: () => beginEdit(r) },
+            {
+              label: "Delete",
+              danger: true,
+              onSelect: () => {
+                if (window.confirm(`Delete ${r.date}?`)) del.mutate(r.id);
+              },
+            },
+          ]}
+        />
+      </div>
+    );
+  };
+
+  const tripTable = (list: Trip[], label: string) => (
+    <DataTable
+      ariaLabel={label}
+      columns={tripColumns}
+      rows={list}
+      rowKey={(t) => tripKey(t)}
+      gridTemplate="44px minmax(150px,1.2fr) 150px 140px minmax(120px,1fr) 120px 190px"
+      minWidth={820}
+      renderMobile={mobileTripRow}
+      renderExpanded={(t) =>
+        expanded.has(tripKey(t)) ? (
+          isMobile ? (
+            <div className="flex flex-col divide-y divide-dashed divide-line border-t border-dashed border-line">
+              {daysForTrip(t).map((r) => (
+                <div key={r.id}>{mobileDayRow(r, true)}</div>
+              ))}
+            </div>
+          ) : (
+            <DataTable
+              ariaLabel={`Days in trip ${t.start}`}
+              columns={dayColumns}
+              rows={daysForTrip(t)}
+              rowKey={(r) => r.id}
+              gridTemplate={DAY_GRID}
+              minWidth={700}
+            />
+          )
+        ) : null
+      }
+    />
+  );
+
+  const sectionLabel = (text: string) => (
+    <h2 className="mb-2 mt-1 px-0.5 text-[12px] font-bold uppercase tracking-[0.06em] text-ink-3">
+      {text}
+    </h2>
+  );
+
   return (
     <section className="animate-epfade">
       <PageHeader
@@ -526,10 +766,62 @@ export function Usage() {
         blurb="Log PTO and personal-holiday days. Adjacent days with the same reason group into one trip."
       />
 
+      {/* ===== Mobile toolbar: view switch, filters, add ===== */}
+      {isMobile && (
+        <div className="mb-3 flex items-center gap-2">
+          <SegmentedControl
+            segments={[
+              { value: "trips", label: "Trips" },
+              { value: "days", label: "Days" },
+            ]}
+            value={view}
+            onChange={setView}
+            ariaLabel="Usage view"
+          />
+          <span className="flex-1" />
+          <button
+            type="button"
+            aria-expanded={filtersOpen}
+            onClick={() => setFiltersOpen((o) => !o)}
+            className="flex h-10 items-center gap-1.5 rounded-field border border-line bg-surface-2 px-3 text-[14px] font-semibold text-ink"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+              <path d="M4 6h16M7 12h10M10 18h4" />
+            </svg>
+            Filter
+            {activeFilters > 0 && (
+              <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-pill bg-primary px-1 text-[11px] font-bold text-[var(--bg-elev)]">
+                {activeFilters}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            aria-label={addOpen ? "Close add form" : "Add time off"}
+            aria-expanded={addOpen}
+            onClick={() => setAddOpen((o) => !o)}
+            className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-[var(--bg-elev)]"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true" style={{ transform: addOpen ? "rotate(45deg)" : "none", transition: "transform .15s" }}>
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          </button>
+        </div>
+      )}
+      {isMobile && allRows.length > 0 && (
+        <p className="mb-2 px-0.5 text-[12.5px] text-ink-2">
+          <span className="font-display font-semibold text-danger">{fmtG(ptoHours)} h</span> PTO ·{" "}
+          <span className="font-display font-semibold text-warn">{fmtG(phHours)} h</span> PH ·{" "}
+          {upcomingTrips.length} upcoming, {pastTrips.length} taken
+          {activeFilters === 0 && " · all years"}
+        </p>
+      )}
+
       {/* ===== Add range ===== */}
+      {(!isMobile || addOpen) && (
       <form
         onSubmit={submitAdd}
-        className="mb-4 flex flex-wrap items-end gap-3 rounded-tile border border-line bg-surface px-[18px] py-4 shadow-[var(--shadow-sm)]"
+        className="mb-4 grid grid-cols-2 items-end gap-2.5 rounded-tile border border-line bg-surface px-3 py-3 shadow-[var(--shadow-sm)] min-[900px]:flex min-[900px]:flex-wrap min-[900px]:gap-3 min-[900px]:px-[18px] min-[900px]:py-4"
       >
         <Field label="Start">
           <input
@@ -561,7 +853,7 @@ export function Usage() {
             <option value="personal_holiday">Personal Holiday</option>
           </select>
         </Field>
-        <Field label="Reason" className="flex-1 basis-40">
+        <Field label="Reason" className="col-span-2 flex-1 basis-40">
           <input
             type="text"
             placeholder="optional"
@@ -585,6 +877,7 @@ export function Usage() {
           {add.isPending ? "Adding…" : "Add days"}
         </Button>
       </form>
+      )}
 
       {addError && (
         <div
@@ -596,8 +889,9 @@ export function Usage() {
       )}
 
       {/* ===== View switch + filters ===== */}
-      <div className="mb-4 flex flex-wrap items-end gap-3">
-        <div className="flex flex-col gap-1.5 text-xs font-semibold text-ink-2">
+      {(!isMobile || filtersOpen) && (
+      <div className="mb-4 grid grid-cols-2 items-end gap-2.5 min-[900px]:flex min-[900px]:flex-wrap min-[900px]:gap-3">
+        <div className="hidden flex-col gap-1.5 text-xs font-semibold text-ink-2 min-[900px]:flex">
           View
           <SegmentedControl
             segments={[
@@ -659,6 +953,7 @@ export function Usage() {
           </Button>
         </div>
       </div>
+      )}
 
       {query.isPending && (
         <div className="rounded-card border border-line bg-surface shadow-[var(--shadow-sm)]">
@@ -687,28 +982,23 @@ export function Usage() {
             rowKey={(r) => r.id}
             gridTemplate={DAY_GRID}
             minWidth={700}
+            renderMobile={(r) => <div className="py-0.5">{mobileDayRow(r)}</div>}
           />
         ) : (
-          <DataTable
-            ariaLabel="Trips"
-            columns={tripColumns}
-            rows={trips}
-            rowKey={(t) => tripKey(t)}
-            gridTemplate="44px minmax(150px,1.2fr) 150px 140px minmax(120px,1fr) 120px 190px"
-            minWidth={820}
-            renderExpanded={(t) =>
-              expanded.has(tripKey(t)) ? (
-                <DataTable
-                  ariaLabel={`Days in trip ${t.start}`}
-                  columns={dayColumns}
-                  rows={daysForTrip(t)}
-                  rowKey={(r) => r.id}
-                  gridTemplate={DAY_GRID}
-                  minWidth={700}
-                />
-              ) : null
-            }
-          />
+          <div className="flex flex-col gap-2">
+            {upcomingTrips.length > 0 && (
+              <div>
+                {sectionLabel("Upcoming")}
+                {tripTable(upcomingTrips, "Upcoming trips")}
+              </div>
+            )}
+            {pastTrips.length > 0 && (
+              <div>
+                {sectionLabel("Taken")}
+                {tripTable(pastTrips, "Past trips")}
+              </div>
+            )}
+          </div>
         ))}
     </section>
   );

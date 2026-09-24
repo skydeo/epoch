@@ -18,6 +18,7 @@ import {
 import { SegmentedControl, type Segment } from "../components/SegmentedControl";
 import { EmptyState, ErrorState, Spinner } from "../components/states";
 import { api, queryKeys, type ChartParams } from "../lib/api";
+import { isoLocal } from "../lib/date";
 import { fmtChartLabel } from "../lib/format";
 import { useTheme, type Theme } from "../lib/theme";
 import type { ChartData } from "../types";
@@ -71,7 +72,7 @@ function palette(theme: Theme) {
       };
 }
 
-const isoDay = (d: Date) => d.toISOString().slice(0, 10);
+const isoDay = isoLocal;
 
 // Each preset clips the window with an explicit `end` so it never runs out to
 // the API's +18-month projection horizon (all presets end at today's period).

@@ -54,3 +54,77 @@ def test_projection_ph_bucket_for_target_year(client):
     next_year = client.get("/api/projection", params={"date": "2027-07-08"}).json()
     assert next_year["snap"]["ph_used"] == 0.0
     assert next_year["snap"]["ph_remaining"] == 16.0
+
+
+# --------------------------------------------------------------------------- #
+# Planner: what-if trips
+# --------------------------------------------------------------------------- #
+
+
+def _usage_count(client) -> int:
+    return len(client.get("/api/usage").json()["rows"])
+
+
+def test_whatif_lowers_the_balance_and_persists_nothing(client):
+    before = _usage_count(client)
+    base = client.get("/api/projection", params={"date": "2023-06-30"}).json()
+    data = client.get(
+        "/api/projection",
+        params={
+            "date": "2023-06-30",
+            "whatif_start": "2023-06-05",  # Mon
+            "whatif_end": "2023-06-09",  # Fri
+        },
+    ).json()
+    assert data["whatif"]["days"] == 5
+    assert data["whatif"]["hours"] == 40.0
+    assert data["baseline_balance"] == base["snap"]["pto_balance"]
+    assert data["snap"]["pto_balance"] == round(base["snap"]["pto_balance"] - 40.0, 2)
+    assert data["series"], "expected a balance series"
+    assert _usage_count(client) == before
+
+
+def test_whatif_skips_company_holidays(client):
+    client.post("/api/settings/holidays", json={"date": "2023-07-04", "name": "July 4"})
+    data = client.get(
+        "/api/projection",
+        params={"date": "2023-07-31", "whatif_start": "2023-07-03", "whatif_end": "2023-07-07"},
+    ).json()
+    assert data["whatif"]["days"] == 4
+    assert data["whatif"]["skipped_holidays"] == ["2023-07-04"]
+
+
+def test_whatif_ph_leaves_pto_alone(client):
+    data = client.get(
+        "/api/projection",
+        params={
+            "date": "2023-06-30",
+            "whatif_start": "2023-06-05",
+            "whatif_end": "2023-06-05",
+            "whatif_type": "personal_holiday",
+        },
+    ).json()
+    assert data["snap"]["pto_balance"] == data["baseline_balance"]
+    assert data["snap"]["ph_remaining"] == 8.0
+
+
+def test_whatif_inverted_range_400(client):
+    resp = client.get(
+        "/api/projection",
+        params={"date": "2023-06-30", "whatif_start": "2023-06-09", "whatif_end": "2023-06-05"},
+    )
+    assert resp.status_code == 400
+
+
+def test_exclude_planned_drops_future_usage(client):
+    with get_session() as session:
+        session.add(UsageEntry(date=date(2099, 1, 5), hours=8, type=UsageType.pto))
+        session.commit()
+    on = client.get("/api/projection", params={"date": "2099-01-20"}).json()
+    off = client.get(
+        "/api/projection", params={"date": "2099-01-20", "include_planned": "false"}
+    ).json()
+    assert on["planned_hours"] == 8.0
+    assert off["snap"]["pto_balance"] >= on["snap"]["pto_balance"]
+    assert any("hasn't been requested" in w for w in on["warnings"])
+    assert not any("hasn't been requested" in w for w in off["warnings"])

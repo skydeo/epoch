@@ -14,6 +14,7 @@ import type {
   Holiday,
   ImportPreview,
   ImportResult,
+  ProjectionParams,
   ProjectionResponse,
   SettingsResponse,
   SettingsUpdate,
@@ -127,8 +128,17 @@ export const api = {
     }),
 
   // --- Projection / stats ---
-  projection: (date?: string) =>
-    apiFetch<ProjectionResponse>(`/api/projection${qs({ date })}`),
+  projection: (params: ProjectionParams = {}) =>
+    apiFetch<ProjectionResponse>(
+      `/api/projection${qs({
+        date: params.date,
+        whatif_start: params.whatif_start,
+        whatif_end: params.whatif_end,
+        whatif_type: params.whatif_start ? params.whatif_type : undefined,
+        include_planned:
+          params.include_planned === false ? "false" : undefined,
+      })}`,
+    ),
   stats: () => apiFetch<StatsResponse>("/api/stats"),
 
   // --- Settings ---
@@ -200,7 +210,7 @@ export const queryKeys = {
   accruals: (year?: number) => ["accruals", year ?? null] as const,
   usage: (filters?: Record<string, unknown>) =>
     ["usage", filters ?? null] as const,
-  projection: (date?: string) => ["projection", date ?? null] as const,
+  projection: (params: ProjectionParams = {}) => ["projection", params] as const,
   stats: () => ["stats"] as const,
   settings: () => ["settings"] as const,
 };

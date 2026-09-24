@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 
 // Standard page title + blurb, with an optional right-aligned slot (badge,
-// controls). Used by every section for consistent altitude.
+// controls). On mobile the AppShell top bar already names the page, so the
+// title and blurb collapse away and only the `right` slot remains.
 export function PageHeader({
   title,
   blurb,
@@ -12,8 +13,8 @@ export function PageHeader({
   right?: ReactNode;
 }) {
   return (
-    <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-      <div>
+    <div className="mb-5 flex flex-wrap items-end justify-between gap-3 max-[899px]:mb-3 max-[899px]:empty:hidden">
+      <div className="max-[899px]:hidden">
         <h1 className="font-display text-[29px] font-bold tracking-[-0.025em]">
           {title}
         </h1>

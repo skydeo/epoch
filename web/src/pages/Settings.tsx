@@ -7,6 +7,7 @@ import { Badge, Button, Field, inputCls } from "../components/ui";
 import { ErrorState, Spinner } from "../components/states";
 import { useToast } from "../components/Toast";
 import { ApiError, api, queryKeys } from "../lib/api";
+import { todayIso } from "../lib/date";
 import { fmtG } from "../lib/format";
 import type {
   Holiday,
@@ -16,7 +17,6 @@ import type {
   Tier,
 } from "../types";
 
-const todayIso = () => new Date().toISOString().slice(0, 10);
 
 const editInputCls =
   "rounded-field border border-line bg-bg-elev px-2 py-1.5 text-[13px] text-ink " +
