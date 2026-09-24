@@ -26,9 +26,11 @@ Per-period order of operations (THE CONTRACT — do not reorder)
 ``prev`` is the balance after the previous period (``0.0`` before period 1).
 Each period is folded in exactly this order:
 
-1. **ROLLOVER** — only for a period that straddles Jan 1 (``start.year <
-   end.year``): forfeit everything above ``rollover_hours`` from the *incoming*
-   balance before this period accrues or is used::
+1. **ROLLOVER** — only for the period containing Jan 1 (it straddles Jan 1,
+   ``start.year < end.year``, or starts exactly on it — 2029-01-01 is a period
+   start for the default hire date): forfeit everything above
+   ``rollover_hours`` from the *incoming* balance before this period accrues or
+   is used::
 
        lost_to_rollover = max(0, prev - rollover_hours)
        prev             = min(prev, rollover_hours)
@@ -143,14 +145,25 @@ class BalanceSnapshot:
 
 @dataclass(frozen=True, slots=True)
 class YearStats:
-    """Per-calendar-year rollup for the stats endpoint."""
+    """Per-calendar-year rollup for the stats endpoint.
+
+    ``pto_used`` = ``pto_taken`` + ``pto_planned`` (split at ``today``).
+    ``partial`` marks a year the ledger does not cover end to end (the hire
+    year, or the last year cut off by ``through``).
+    """
 
     year: int
     accrued: float
     pto_used: float
+    pto_taken: float
+    pto_planned: float
     ph_used: float
+    ph_granted: float
+    ph_remaining: float
     lost_to_cap: float
     lost_to_rollover: float
+    end_balance: float
+    partial: bool
 
 
 # --------------------------------------------------------------------------- #
@@ -178,6 +191,11 @@ def period_bounds(cfg: EngineConfig, index: int) -> tuple[date, date, date]:
     end = start + timedelta(days=cfg.period_length_days - 1)
     pay_date = end + timedelta(days=cfg.pay_date_offset_days)
     return start, end, pay_date
+
+
+def contains_jan1(start: date, end: date) -> bool:
+    """True for the one period per year whose window includes Jan 1."""
+    return start.year < end.year or (start.month == 1 and start.day == 1)
 
 
 def accrual_rate(cfg: EngineConfig, period_end: date) -> float:
@@ -222,10 +240,10 @@ def step_period(
     """
     start, end, pay_date = period_bounds(cfg, index)
 
-    # 1. ROLLOVER — clamp the incoming balance for a Jan-1-straddling period.
+    # 1. ROLLOVER — clamp the incoming balance for the period containing Jan 1.
     lost_to_rollover = 0.0
     prev = prev_balance
-    if start.year < end.year:
+    if contains_jan1(start, end):
         lost_to_rollover = max(0.0, prev - cfg.rollover_hours)
         prev = min(prev, cfg.rollover_hours)
 
@@ -355,31 +373,80 @@ def loss_warnings(rows: list[PeriodRow]) -> list[str]:
 
 
 def yearly_stats(
-    cfg: EngineConfig, usage: list[UsageItem], through: date
+    cfg: EngineConfig,
+    usage: list[UsageItem],
+    through: date,
+    today: date | None = None,
 ) -> list[YearStats]:
     """Per-calendar-year totals over the ledger through ``through``.
 
-    Grouped by each period's end-date year: accrued, PTO used, PH used, and
-    hours lost to the cap and to the year-end rollover.
+    Attribution rules — each figure lands in the year a person would expect:
+
+    * **accrued / lost to cap** — the year the period *ends* (when it is paid).
+    * **PTO / PH used** — each usage entry's own *date* year, matching
+      ``balance_on``'s PH bucket and the Usage page's year filter (a Dec 29 day
+      off inside a Jan-straddling period is the old year's).
+    * **lost to rollover** — the year that *ended*: hours forfeited on Jan 1 of
+      Y were built up in Y-1.
+    * **end_balance** — the balance leaving the last period that ends in Y.
+
+    ``today`` (default ``through``) splits usage into taken (``<= today``) and
+    planned (``> today``).
     """
     rows = compute_ledger(cfg, usage, through)
-    acc: dict[int, list[float]] = {}
-    for row in rows:
-        y = row.end.year
-        totals = acc.setdefault(y, [0.0, 0.0, 0.0, 0.0, 0.0])
-        totals[0] += row.accrual
-        totals[1] += row.pto_used
-        totals[2] += row.ph_used
-        totals[3] += row.lost_to_cap
-        totals[4] += row.lost_to_rollover
-    return [
-        YearStats(
-            year=y,
-            accrued=round(totals[0], 2),
-            pto_used=round(totals[1], 2),
-            ph_used=round(totals[2], 2),
-            lost_to_cap=round(totals[3], 2),
-            lost_to_rollover=round(totals[4], 2),
+    if not rows:
+        return []
+    cutoff = today or through
+    last_end = rows[-1].end
+
+    years: dict[int, dict[str, float]] = {}
+
+    def bucket(y: int) -> dict[str, float]:
+        return years.setdefault(
+            y,
+            {
+                "accrued": 0.0, "taken": 0.0, "planned": 0.0, "ph": 0.0,
+                "cap": 0.0, "roll": 0.0, "end_balance": 0.0,
+            },
         )
-        for y, totals in sorted(acc.items())
-    ]
+
+    for row in rows:
+        b = bucket(row.end.year)
+        b["accrued"] += row.accrual
+        b["cap"] += row.lost_to_cap
+        b["end_balance"] = row.balance
+        if row.lost_to_rollover:
+            bucket(row.end.year - 1)["roll"] += row.lost_to_rollover
+
+    for item in usage:
+        if item.date > last_end:
+            continue
+        b = bucket(item.date.year)
+        if item.is_ph:
+            b["ph"] += item.hours
+        elif item.date <= cutoff:
+            b["taken"] += item.hours
+        else:
+            b["planned"] += item.hours
+
+    first_start = rows[0].start
+    out: list[YearStats] = []
+    for y, b in sorted(years.items()):
+        partial = first_start > date(y, 1, 1) or last_end < date(y, 12, 31)
+        out.append(
+            YearStats(
+                year=y,
+                accrued=round(b["accrued"], 2),
+                pto_used=round(b["taken"] + b["planned"], 2),
+                pto_taken=round(b["taken"], 2),
+                pto_planned=round(b["planned"], 2),
+                ph_used=round(b["ph"], 2),
+                ph_granted=cfg.ph_annual_hours,
+                ph_remaining=max(0.0, round(cfg.ph_annual_hours - b["ph"], 2)),
+                lost_to_cap=round(b["cap"], 2),
+                lost_to_rollover=round(b["roll"], 2),
+                end_balance=round(b["end_balance"], 2),
+                partial=partial,
+            )
+        )
+    return out

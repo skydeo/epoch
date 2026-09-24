@@ -469,3 +469,26 @@ def test_import_confirm_replace_then_merge(client):
     resp = client.post("/api/import/confirm", json={"csv_text": _CSV, "mode": "merge"})
     assert resp.json() == {"imported": 0, "skipped": 2, "mode": "merge"}
     assert len(_all_entries()) == 2
+
+
+def test_usage_create_ph_first(client):
+    """A PH-first range spends the year's 16 h PH on the first two days."""
+    resp = client.post(
+        "/api/usage",
+        json={"start": "2026-07-13", "end": "2026-07-15", "type": "ph_first", "reason": "Trip"},
+    )
+    assert resp.status_code == 201
+    created = sorted(resp.json()["created"], key=lambda e: e["date"])
+    assert [(e["date"], e["type"]) for e in created] == [
+        ("2026-07-13", "personal_holiday"),
+        ("2026-07-14", "personal_holiday"),
+        ("2026-07-15", "pto"),
+    ]
+
+
+def test_usage_filter_multiple_years_keeps_full_year_list(client):
+    for start in ("2024-03-04", "2025-03-03", "2026-03-02"):
+        client.post("/api/usage", json={"start": start, "end": start, "type": "pto"})
+    data = client.get("/api/usage", params=[("year", 2024), ("year", 2026)]).json()
+    assert sorted({r["date"][:4] for r in data["rows"]}) == ["2024", "2026"]
+    assert data["years"] == [2024, 2025, 2026]  # unfiltered, so the picker keeps 2025

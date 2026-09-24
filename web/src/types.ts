@@ -3,6 +3,8 @@
 // wrappers as later phases add fields.
 
 export type UsageTypeValue = "pto" | "personal_holiday";
+/** What a new range is booked as: a fixed type, or remaining PH first then PTO. */
+export type BookingType = UsageTypeValue | "ph_first";
 
 export interface DashboardStats {
   current_balance: number;
@@ -96,7 +98,7 @@ export interface UsageBulkPatch {
 export interface UsageCreate {
   start: string;
   end: string;
-  type: UsageTypeValue;
+  type: BookingType;
   reason: string;
   requested: boolean;
 }
@@ -122,6 +124,24 @@ export interface ProjectionSnap {
   warnings: string[];
 }
 
+export interface ProjectionWhatIf {
+  start: string;
+  end: string;
+  type: BookingType;
+  days: number;
+  hours: number;
+  ph_hours: number;
+  pto_hours: number;
+  skipped_holidays: string[];
+}
+
+export interface ProjectionPoint {
+  end: string; // period end, ISO
+  baseline: number;
+  scenario: number;
+}
+
+/** `snap` / `warnings` describe the scenario (baseline + any what-if trip). */
 export interface ProjectionResponse {
   snap: ProjectionSnap;
   period_start: string;
@@ -132,20 +152,49 @@ export interface ProjectionResponse {
   target: string; // ISO date
   today: string; // ISO date
   is_future: boolean;
+  baseline_balance: number;
+  baseline_ph_remaining: number;
+  headroom: number;
+  cap: number;
+  rollover_limit: number;
+  rollover: { date: string; lost: number; applies: boolean };
+  lowest: { balance: number; end: string } | null;
+  series: ProjectionPoint[];
+  planned_hours: number;
+  include_planned: boolean;
+  hours_per_day: number;
+  whatif: ProjectionWhatIf | null;
+}
+
+export interface ProjectionParams {
+  date?: string;
+  whatif_start?: string;
+  whatif_end?: string;
+  whatif_type?: BookingType;
+  include_planned?: boolean;
 }
 
 // --- Per-year stats (GET /api/stats) ---
 
+/** Usage counts by entry date; accrual/cap by period end; rollover loss in
+ *  the year that ended. `partial` = the ledger doesn't cover the whole year. */
 export interface YearStat {
   year: number;
   accrued: number;
   pto_used: number;
+  pto_taken: number;
+  pto_planned: number;
   ph_used: number;
+  ph_granted: number;
+  ph_remaining: number;
   lost_to_cap: number;
   lost_to_rollover: number;
+  end_balance: number;
+  partial: boolean;
 }
 
 export interface StatsResponse {
+  today: string;
   years: YearStat[];
 }
 

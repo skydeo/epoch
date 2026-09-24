@@ -4,16 +4,18 @@
 // 11.5px --text-3 labels; body rows are CSS grids using the caller's
 // `gridTemplate`; numbers right-aligned + tabular.
 //
-// Mobile (< 900px): each row collapses to a card of label–value pairs, the
-// header hides, and the grid folds to one column. The switch is entirely in
-// index.css (`.dt` custom properties) — this component only feeds the desktop
-// template through the inline `--dt-desk-cols` var and per-cell mobile labels.
+// Mobile (< 900px): pass `renderMobile` to get a dense divider-separated list
+// where the caller composes each row (typically two lines: the key facts and
+// the numbers). Without it, rows fall back to cards of label–value pairs via
+// index.css (`.dt` custom properties) — fine for short settings tables.
 //
 // Row-state styling: `current` → --current bg + 3px --current-bar left bar;
 // `future` → ~0.72 opacity; `past`/`default` → normal. Pass `scrollToKey` to
 // auto-scroll a row into view on first load (Accruals' current period).
 
 import { Fragment, useRef, type ReactNode } from "react";
+
+import { useIsMobile } from "../lib/useMediaQuery";
 
 export type RowState = "past" | "current" | "future" | "default";
 
@@ -44,6 +46,8 @@ export interface DataTableProps<Row> {
    * leave the row collapsed. Rendered as a block sibling so it spans all cols.
    */
   renderExpanded?: (row: Row) => ReactNode;
+  /** Compact mobile row content (< 900px); replaces the label–value card. */
+  renderMobile?: (row: Row) => ReactNode;
   ariaLabel: string;
 }
 
@@ -62,8 +66,10 @@ export function DataTable<Row>({
   rowState,
   scrollToKey,
   renderExpanded,
+  renderMobile,
   ariaLabel,
 }: DataTableProps<Row>) {
+  const isMobile = useIsMobile();
   // Track the last key we auto-scrolled to so we only do it once per target.
   const scrolledRef = useRef<string | number | null>(null);
   if (scrollToKey == null || scrolledRef.current !== scrollToKey) {
@@ -82,6 +88,40 @@ export function DataTable<Row>({
         el.scrollIntoView({ block: "center" });
       }
     };
+
+  if (isMobile && renderMobile) {
+    return (
+      <div
+        role="list"
+        aria-label={ariaLabel}
+        className="rounded-[14px] border border-line bg-surface"
+      >
+        {rows.map((row) => {
+          const key = rowKey(row);
+          const state = rowState?.(row) ?? "default";
+          const expanded = renderExpanded?.(row);
+          return (
+            <div
+              key={key}
+              role="listitem"
+              ref={setRowRef(key)}
+              className={[
+                // No overflow-hidden on the list (row menus pop out of it), so
+                // the ends round themselves to keep highlights in the corners.
+                "border-b border-line first:rounded-t-[13px] last:rounded-b-[13px] last:border-b-0",
+                state === "current" ? "bg-[var(--current)]" : "",
+                state === "future" ? "opacity-75" : "",
+                expanded ? "bg-surface-2" : "",
+              ].join(" ")}
+            >
+              {renderMobile(row)}
+              {expanded ? <div className="pb-2">{expanded}</div> : null}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
 
   return (
     <div className="dt overflow-hidden rounded-card border border-line bg-surface shadow-[var(--shadow)]">
