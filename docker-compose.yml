@@ -1,6 +1,7 @@
 services:
   epoch:
     build: .
+    container_name: epoch
     restart: unless-stopped
     ports:
       # host:container. The app inside the container ALWAYS listens on 8000;
