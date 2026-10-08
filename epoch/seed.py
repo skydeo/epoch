@@ -61,25 +61,25 @@ DEFAULT_TIERS: list[dict] = [
 DEFAULT_HOLIDAYS: list[dict] = [
     # 2026
     {"date": date(2026, 1, 1), "name": "New Year's Day"},
-    {"date": date(2026, 1, 19), "name": "Martin Luther King Jr. Day"},
     {"date": date(2026, 2, 16), "name": "Presidents' Day"},
     {"date": date(2026, 5, 25), "name": "Memorial Day"},
-    {"date": date(2026, 6, 19), "name": "Juneteenth"},
     {"date": date(2026, 7, 3), "name": "Independence Day (observed)"},
     {"date": date(2026, 9, 7), "name": "Labor Day"},
     {"date": date(2026, 11, 26), "name": "Thanksgiving Day"},
     {"date": date(2026, 11, 27), "name": "Day after Thanksgiving"},
+    {"date": date(2026, 12, 24), "name": "Christmas Eve Day"},
     {"date": date(2026, 12, 25), "name": "Christmas Day"},
-    # 2027
+    # 2027 — from the company's official 2027 holiday schedule. The company
+    # doesn't observe MLK Day or Juneteenth; the two floating holidays are the
+    # personal-holiday hours.
     {"date": date(2027, 1, 1), "name": "New Year's Day"},
-    {"date": date(2027, 1, 18), "name": "Martin Luther King Jr. Day"},
     {"date": date(2027, 2, 15), "name": "Presidents' Day"},
     {"date": date(2027, 5, 31), "name": "Memorial Day"},
-    {"date": date(2027, 6, 18), "name": "Juneteenth (observed)"},
     {"date": date(2027, 7, 5), "name": "Independence Day (observed)"},
     {"date": date(2027, 9, 6), "name": "Labor Day"},
     {"date": date(2027, 11, 25), "name": "Thanksgiving Day"},
     {"date": date(2027, 11, 26), "name": "Day after Thanksgiving"},
+    {"date": date(2027, 12, 23), "name": "Christmas Eve Day (observed)"},
     {"date": date(2027, 12, 24), "name": "Christmas Day (observed)"},
 ]
 
