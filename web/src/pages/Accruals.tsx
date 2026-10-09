@@ -20,6 +20,8 @@ const STATUS: Record<
   future: { label: "Upcoming", color: "var(--teal)", bg: "var(--teal-soft)" },
 };
 
+const PENDING = { label: "Unpaid", color: "var(--primary)", bg: "var(--primary-soft)" };
+
 const LEGEND = [
   { color: "var(--text-3)", label: "Past" },
   { color: "var(--primary)", label: "Current" },
@@ -106,7 +108,14 @@ const COLUMNS: Column<AccrualRow>[] = [
       <span className="flex flex-col items-end gap-1">
         <span
           className="font-display font-bold tabular-nums"
-          style={{ color: r.is_current ? "var(--primary)" : "var(--text)" }}
+          style={{
+            color: !r.paid
+              ? "var(--text-3)"
+              : r.is_current
+                ? "var(--primary)"
+                : "var(--text)",
+          }}
+          title={r.paid ? undefined : `Credited on ${fmtShort(r.pay_date)}`}
         >
           {fmt2(r.balance)}
         </span>
@@ -119,7 +128,8 @@ const COLUMNS: Column<AccrualRow>[] = [
     header: "Status",
     align: "right",
     render: (r) => {
-      const s = STATUS[r.state];
+      // A period that has ended but not been paid yet.
+      const s = r.state === "past" && !r.paid ? PENDING : STATUS[r.state];
       return (
         <Badge color={s.color} bg={s.bg}>
           {s.label}
@@ -145,14 +155,17 @@ function MobileAccrualRow({ r }: { r: AccrualRow }) {
           </span>
         )}
         <span className="flex-1" />
-        <span className="font-display text-[16px] font-bold tabular-nums">
+        <span
+          className="font-display text-[16px] font-bold tabular-nums"
+          style={r.paid ? undefined : { color: "var(--text-3)" }}
+        >
           {fmt2(r.balance)}
           <span className="text-[11.5px] font-medium text-ink-3"> h</span>
         </span>
       </div>
       <div className="flex items-center gap-2 text-[12.5px] text-ink-3">
         <span>
-          {r.state === "past" ? "Paid" : "Pays"} {fmtShort(r.pay_date, { year: false })}
+          {r.paid ? "Paid" : "Pays"} {fmtShort(r.pay_date, { year: false })}
         </span>
         <span className="flex-1" />
         {r.lost_to_cap > 0 && (

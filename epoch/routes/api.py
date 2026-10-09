@@ -85,6 +85,7 @@ def _period_json(row: PeriodRow, on: date, current_index: int) -> dict:
         "lost_to_cap": row.lost_to_cap,
         "lost_to_rollover": row.lost_to_rollover,
         "state": row_state(row, on),
+        "paid": row.pay_date <= on,
         "is_current": row.index == current_index,
     }
 

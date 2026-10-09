@@ -20,6 +20,7 @@ CHART_KEYS = {
     "max_accrued",
     "cap",
     "today_index",
+    "paid_index",
     "years",
 }
 

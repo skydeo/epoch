@@ -9,12 +9,15 @@ export type BookingType = UsageTypeValue | "ph_first";
 export interface DashboardStats {
   current_balance: number;
   current_balance_negative: boolean;
+  balance_as_of: string | null; // ISO pay date of the last paycheck
+  pto_taken_since: number; // PTO taken after that paycheck's period
   ph_remaining: number;
   ph_granted: number;
   max_balance: number;
   pct_of_cap: number;
   cap: number;
   pto_used_ytd: number;
+  pto_paid_ytd: number; // by pay date — matches the pay stub YTD
   next_pay_date: string | null; // ISO date
   next_pay_accrual: number;
   year: number;
@@ -29,6 +32,7 @@ export interface ChartData {
   max_accrued: number;
   cap: number;
   today_index: number; // -1 when the current period is outside the window
+  paid_index: number; // last index whose paycheck has landed; -1 if none
   years: number[]; // calendar years for the year filter, newest first
 }
 
@@ -56,6 +60,7 @@ export interface AccrualRow {
   lost_to_cap: number;
   lost_to_rollover: number;
   state: "past" | "current" | "future";
+  paid: boolean; // pay date has passed — the balance is earned, not pending
   is_current: boolean;
 }
 

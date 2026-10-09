@@ -31,10 +31,12 @@ router = APIRouter(prefix="/api", tags=["data"])
 async def chart_data(start: str | None = None, end: str | None = None) -> dict:
     """Parallel arrays for the dashboard chart.
 
-    ``{labels, balance[], pto_used[], ph_used[], max_accrued, cap, today_index}``.
+    ``{labels, balance[], pto_used[], ph_used[], max_accrued, cap, today_index,
+    paid_index}``.
     ``labels`` are period start dates (ISO). ``today_index`` is the 0-based
     position of the current period within the returned window, or ``-1`` if the
-    window excludes today. The optional ``start`` / ``end`` (ISO dates) clip the
+    window excludes today. ``paid_index`` is the last position whose pay date
+    has passed (``-1`` if none). The optional ``start`` / ``end`` (ISO dates) clip the
     window to periods whose *start* falls in ``[start, end]``.
     """
     today = services.today()
@@ -62,6 +64,12 @@ async def chart_data(start: str | None = None, end: str | None = None) -> dict:
         (i for i, r in enumerate(window) if r.index == current_index), -1
     )
 
+    # Last window position whose paycheck has landed; the balance line past it
+    # is accrual not yet paid (drawn dashed).
+    paid_index = max(
+        (i for i, r in enumerate(window) if r.pay_date <= today), default=-1
+    )
+
     # max_accrued is the peak balance ever *reached* — periods up to and
     # including the current one (matches the sheet's "Max PTO Accrued" line and
     # the dashboard stat). Future projected periods are excluded: with no
@@ -84,6 +92,7 @@ async def chart_data(start: str | None = None, end: str | None = None) -> dict:
         "max_accrued": round(max_accrued, 2),
         "cap": cfg.max_balance_hours,
         "today_index": today_index,
+        "paid_index": paid_index,
         "years": years,
     }
 
