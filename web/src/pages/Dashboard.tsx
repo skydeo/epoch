@@ -9,14 +9,23 @@ import { fmt2, fmtG, fmtLongDate } from "../lib/format";
 import type { DashboardStats } from "../types";
 import { BalanceChart } from "./BalanceChart";
 
+// The balance is as of the last paycheck, less PTO taken since.
+function balanceSub(d: DashboardStats): string {
+  if (!d.balance_as_of) return "no paycheck yet";
+  const paid = fmtShort(d.balance_as_of, { year: false });
+  return d.pto_taken_since > 0
+    ? `${paid} pay − ${fmtG(d.pto_taken_since)} h taken`
+    : `as of ${paid} paycheck`;
+}
+
 // Top row: what you check most. Bottom row: context, shown smaller below the
 // chart.
 function buildCards(d: DashboardStats): { primary: StatCardProps[]; secondary: StatCardProps[] } {
-  const [current, ph, max, pct, ytd, next] = [
+  const [current, ph, paid, pct, ytd, next] = [
     {
       label: "PTO balance",
       value: fmt2(d.current_balance),
-      sub: "hours, this period",
+      sub: balanceSub(d),
       iconColor: "var(--primary)",
       iconBg: "var(--primary-soft)",
       iconShape: "circle",
@@ -30,9 +39,9 @@ function buildCards(d: DashboardStats): { primary: StatCardProps[]; secondary: S
       iconBg: "var(--teal-soft)",
     },
     {
-      label: "Max Balance Ever",
-      value: fmt2(d.max_balance),
-      sub: "peak accrued to date",
+      label: "Paid YTD",
+      value: fmtG(d.pto_paid_ytd),
+      sub: `PTO hours on ${d.year} stubs`,
       iconColor: "var(--teal)",
       iconBg: "var(--teal-soft)",
       iconShape: "circle",
@@ -60,7 +69,7 @@ function buildCards(d: DashboardStats): { primary: StatCardProps[]; secondary: S
       iconShape: "circle",
     },
   ];
-  return { primary: [current, ph, next], secondary: [ytd, max, pct] };
+  return { primary: [current, ph, next], secondary: [ytd, paid, pct] };
 }
 
 export function Dashboard() {

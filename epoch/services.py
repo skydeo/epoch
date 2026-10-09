@@ -70,14 +70,31 @@ def dashboard_stats(cfg: EngineConfig, usage, on: date) -> dict:
     """Compute every stat card from a single ledger fold through ``on``."""
     ledger = compute_ledger(cfg, usage, on)
     snap = balance_on(cfg, usage, on)
-    current = ledger[-1]
+
+    # The headline balance is the last *paid* period's balance — a period's
+    # accrual isn't earned until its paycheck — minus any PTO already taken
+    # since that period ended. Booked-but-future days don't count yet.
+    paid = [r for r in ledger if r.pay_date <= on]
+    last_paid = paid[-1] if paid else None
+    paid_through = last_paid.end if last_paid else cfg.hire_date - timedelta(days=1)
+    pto_taken_since = round(
+        sum(u.hours for u in usage if not u.is_ph and paid_through < u.date <= on),
+        2,
+    )
+    balance = round((last_paid.balance if last_paid else 0.0) - pto_taken_since, 2)
 
     max_balance = max((r.balance for r in ledger), default=0.0)
     pct_of_cap = (
-        (current.balance / cfg.max_balance_hours * 100.0)
-        if cfg.max_balance_hours
-        else 0.0
+        (balance / cfg.max_balance_hours * 100.0) if cfg.max_balance_hours else 0.0
     )
+
+    # balance_on's negative-balance warning (always first when present) is
+    # about the current period's projected end; restate it for the headline.
+    warnings = list(snap.warnings[1:] if snap.pto_balance < 0 else snap.warnings)
+    if balance < 0:
+        warnings.insert(
+            0, f"PTO balance is negative ({balance:.2f} h) — usage exceeds accrued"
+        )
     # By each entry's own date (not its period's end year) so a late-December
     # day off never counts toward the next year — same rule as yearly_stats.
     pto_used_ytd = round(
@@ -88,33 +105,42 @@ def dashboard_stats(cfg: EngineConfig, usage, on: date) -> dict:
         ),
         2,
     )
+    # By pay date instead — what the pay stub's YTD PTO hours column shows. A
+    # late-December period lands in the year its paycheck does.
+    pto_paid_ytd = round(
+        sum(r.pto_used for r in ledger if r.pay_date.year == on.year and r.pay_date <= on),
+        2,
+    )
 
-    # Next pay: earliest period (from the current one onward) whose pay date
-    # has not yet passed.
+    # Next pay: earliest period whose paycheck is still to come (a paycheck
+    # dated today is already in the balance above).
     next_pay_date = None
     next_pay_accrual = 0.0
-    idx = current.index
-    for _ in range(3):  # current + a couple ahead is always enough
+    idx = max(1, ledger[-1].index - 1)
+    for _ in range(3):  # the previous period, current, and one ahead suffice
         start, end, pay = period_bounds(cfg, idx)
-        if pay >= on:
+        if pay > on:
             next_pay_date = pay
             next_pay_accrual = accrual_rate(cfg, end)
             break
         idx += 1
 
     return {
-        "current_balance": current.balance,
-        "current_balance_negative": current.balance < 0,
+        "current_balance": balance,
+        "current_balance_negative": balance < 0,
+        "balance_as_of": last_paid.pay_date.isoformat() if last_paid else None,
+        "pto_taken_since": pto_taken_since,
         "ph_remaining": snap.ph_remaining,
         "ph_granted": snap.ph_granted,
         "max_balance": round(max_balance, 2),
         "pct_of_cap": round(pct_of_cap, 1),
         "cap": cfg.max_balance_hours,
         "pto_used_ytd": pto_used_ytd,
+        "pto_paid_ytd": pto_paid_ytd,
         "next_pay_date": next_pay_date,
         "next_pay_accrual": next_pay_accrual,
         "year": on.year,
-        "warnings": snap.warnings,
+        "warnings": warnings,
     }
 
 

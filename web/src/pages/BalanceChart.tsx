@@ -151,6 +151,11 @@ function ChartCanvas({
         pointRadius: n > 45 ? 0 : 2.5,
         pointHoverRadius: 5,
         tension: 0.18,
+        // Dashed past the last paycheck: accrual shown there isn't earned yet.
+        segment: {
+          borderDash: (ctx) =>
+            ctx.p1DataIndex > data.paid_index ? [6, 5] : undefined,
+        },
         order: 0,
         // Every line gets a unique stack key: the scales are stacked for the
         // usage bars, and lines sharing a stack would sum their values.
@@ -347,7 +352,8 @@ export function BalanceChart() {
             Balance over time
           </h2>
           <p className="mt-1 text-[12.5px] text-ink-3">
-            End-of-period balance, hours used, and the all-time peak.
+            End-of-period balance (dashed until paid), hours used, and the
+            all-time peak.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
